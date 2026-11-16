@@ -68,6 +68,18 @@ router.get('/', async (req: Request, res: Response) => {
             dayOfWeek: 'asc',
           },
         },
+        reviews: {
+          include: {
+            patient: {
+              select: {
+                fullName: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
       },
       orderBy: {
         user: {
@@ -78,24 +90,39 @@ router.get('/', async (req: Request, res: Response) => {
 
     return res.status(200).json({
       count: doctors.length,
-      doctors: doctors.map((doc) => ({
-        id: doc.id,
-        userId: doc.userId,
-        fullName: doc.user.fullName,
-        email: doc.user.email,
-        phone: doc.user.phone,
-        specialty: doc.specialty,
-        licenseNumber: doc.licenseNumber,
-        bio: doc.bio,
-        consultationFee: Number(doc.consultationFee),
-        schedules: doc.schedules.map((s) => ({
-          id: s.id,
-          dayOfWeek: s.dayOfWeek,
-          startTime: s.startTime,
-          endTime: s.endTime,
-          slotDurationMinutes: s.slotDurationMinutes,
-        })),
-      })),
+      doctors: doctors.map((doc) => {
+        const reviewCount = doc.reviews.length;
+        const totalRating = doc.reviews.reduce((acc, r) => acc + r.rating, 0);
+        const averageRating = reviewCount > 0 ? Number((totalRating / reviewCount).toFixed(1)) : 0;
+
+        return {
+          id: doc.id,
+          userId: doc.userId,
+          fullName: doc.user.fullName,
+          email: doc.user.email,
+          phone: doc.user.phone,
+          specialty: doc.specialty,
+          licenseNumber: doc.licenseNumber,
+          bio: doc.bio,
+          consultationFee: Number(doc.consultationFee),
+          averageRating,
+          reviewCount,
+          recentReviews: doc.reviews.slice(0, 5).map((r) => ({
+            id: r.id,
+            patientName: r.patient.fullName,
+            rating: r.rating,
+            comment: r.comment,
+            createdAt: r.createdAt,
+          })),
+          schedules: doc.schedules.map((s) => ({
+            id: s.id,
+            dayOfWeek: s.dayOfWeek,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            slotDurationMinutes: s.slotDurationMinutes,
+          })),
+        };
+      }),
     });
   } catch (error: any) {
     console.error('Error en /api/doctors:', error);

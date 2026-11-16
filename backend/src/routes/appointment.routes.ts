@@ -44,6 +44,12 @@ const paymentSchema = z.object({
   amountPaid: z.number().positive('El monto abonado debe ser mayor a 0').optional(),
 });
 
+// Esquema Zod para Calificación Médica (Reseña)
+const reviewSchema = z.object({
+  rating: z.number().int().min(1, 'La calificación mínima es 1 estrella').max(5, 'La calificación máxima es 5 estrellas'),
+  comment: z.string().max(1000, 'El comentario no puede exceder 1000 caracteres').optional(),
+});
+
 // POST /api/appointments - Crear cita médica
 router.post('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
   try {
@@ -147,6 +153,22 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
       },
     });
 
+    // Disparar notificación automática al médico asignado
+    try {
+      const scheduledFormatted = scheduledDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timeFormatted = scheduledDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      await prisma.notification.create({
+        data: {
+          userId: doctor.userId,
+          title: 'Nueva Cita Médica Agendada',
+          message: `El/La paciente ${newAppointment.patient.fullName} agendó una cita para el ${scheduledFormatted} a las ${timeFormatted}. Motivo: "${reason}".`,
+          type: 'APPOINTMENT',
+        },
+      });
+    } catch (notifErr) {
+      console.error('Error al generar notificación para el médico:', notifErr);
+    }
+
     return res.status(201).json({
       message: 'Cita médica agendada exitosamente',
       appointment: {
@@ -229,6 +251,7 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         },
         triage: true,
         medicalRecord: true,
+        review: true,
       },
       orderBy: {
         scheduledAt: 'asc',
@@ -258,6 +281,14 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         },
         triage: app.triage,
         hasMedicalRecord: !!app.medicalRecord,
+        review: app.review
+          ? {
+              id: app.review.id,
+              rating: app.review.rating,
+              comment: app.review.comment,
+              createdAt: app.review.createdAt,
+            }
+          : null,
         createdAt: app.createdAt,
         updatedAt: app.updatedAt,
       })),
@@ -456,6 +487,57 @@ router.patch('/:id/status', authenticateJwt, async (req: AuthRequest, res: Respo
       },
     });
 
+    // Disparar notificaciones automáticas según el nuevo estado
+    try {
+      const scheduledFormatted = new Date(updatedAppointment.scheduledAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timeFormatted = new Date(updatedAppointment.scheduledAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      const docName = updatedAppointment.doctor.user.fullName;
+
+      if (targetStatus === AppointmentStatus.CONFIRMED) {
+        await prisma.notification.create({
+          data: {
+            userId: updatedAppointment.patient.id,
+            title: 'Cita Médica Confirmada',
+            message: `Tu cita médica con el/la Dr(a). ${docName} para el ${scheduledFormatted} a las ${timeFormatted} ha sido confirmada.`,
+            type: 'APPOINTMENT',
+          },
+        });
+      } else if (targetStatus === AppointmentStatus.CANCELLED) {
+        if (req.user.role === Role.PATIENT) {
+          // Si el paciente cancela, notificar al médico
+          await prisma.notification.create({
+            data: {
+              userId: appointment.doctor.userId,
+              title: 'Cita Cancelada por el Paciente',
+              message: `El/La paciente ${updatedAppointment.patient.fullName} canceló su cita del ${scheduledFormatted} a las ${timeFormatted}.`,
+              type: 'APPOINTMENT',
+            },
+          });
+        } else {
+          // Si el doctor/admin cancela, notificar al paciente
+          await prisma.notification.create({
+            data: {
+              userId: updatedAppointment.patient.id,
+              title: 'Cita Médica Cancelada',
+              message: `Tu cita médica con el/la Dr(a). ${docName} para el ${scheduledFormatted} ha sido cancelada.`,
+              type: 'APPOINTMENT',
+            },
+          });
+        }
+      } else if (targetStatus === AppointmentStatus.COMPLETED) {
+        await prisma.notification.create({
+          data: {
+            userId: updatedAppointment.patient.id,
+            title: 'Atención Médica Completada',
+            message: `Tu consulta con el/la Dr(a). ${docName} ha finalizado. ¡Ya puedes calificar tu atención recibida!`,
+            type: 'APPOINTMENT',
+          },
+        });
+      }
+    } catch (notifErr) {
+      console.error('Error al generar notificación de cambio de estado:', notifErr);
+    }
+
     return res.status(200).json({
       message: `Estado de la cita actualizado a ${targetStatus}`,
       appointment: {
@@ -475,5 +557,109 @@ router.patch('/:id/status', authenticateJwt, async (req: AuthRequest, res: Respo
     });
   }
 });
+
+// POST /api/appointments/:id/review - Calificar atención médica recibida (Solo Paciente titular)
+router.post(
+  '/:id/review',
+  authenticateJwt,
+  authorizeRoles(Role.PATIENT),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Usuario no autenticado' });
+      }
+
+      const { id } = req.params;
+      const parseResult = reviewSchema.safeParse(req.body);
+
+      if (!parseResult.success) {
+        return res.status(400).json({
+          error: 'Datos de calificación inválidos',
+          details: parseResult.error.format(),
+        });
+      }
+
+      const { rating, comment } = parseResult.data;
+
+      const appointment = await prisma.appointment.findUnique({
+        where: { id },
+        include: {
+          doctor: {
+            include: {
+              user: { select: { fullName: true } },
+            },
+          },
+          review: true,
+        },
+      });
+
+      if (!appointment) {
+        return res.status(404).json({ error: 'Cita médica no encontrada.' });
+      }
+
+      if (appointment.patientId !== req.user.id) {
+        return res.status(403).json({ error: 'Solo el paciente titular puede calificar esta consulta médica.' });
+      }
+
+      if (appointment.status !== AppointmentStatus.COMPLETED) {
+        return res.status(400).json({
+          error: 'Solo se pueden calificar consultas médicas completadas.',
+        });
+      }
+
+      if (appointment.review) {
+        return res.status(400).json({
+          error: 'Esta cita médica ya ha sido calificada previamente.',
+        });
+      }
+
+      const newReview = await prisma.doctorReview.create({
+        data: {
+          appointmentId: id,
+          patientId: req.user.id,
+          doctorId: appointment.doctorId,
+          rating,
+          comment: comment?.trim() || null,
+        },
+        include: {
+          patient: {
+            select: { fullName: true },
+          },
+        },
+      });
+
+      // Notificación automática al médico por su nueva reseña
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: appointment.doctor.userId,
+            title: 'Nueva Calificación de Paciente',
+            message: `El/La paciente ${newReview.patient.fullName} calificó tu atención con ${rating} estrella(s).${comment ? ` Comentario: "${comment}"` : ''}`,
+            type: 'SYSTEM',
+          },
+        });
+      } catch (notifErr) {
+        console.error('Error al generar notificación de reseña para el médico:', notifErr);
+      }
+
+      return res.status(201).json({
+        message: '¡Muchas gracias por calificar la atención médica!',
+        review: {
+          id: newReview.id,
+          appointmentId: newReview.appointmentId,
+          rating: newReview.rating,
+          comment: newReview.comment,
+          patientName: newReview.patient.fullName,
+          createdAt: newReview.createdAt,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error al registrar reseña:', error);
+      return res.status(500).json({
+        error: 'Error interno del servidor al procesar la calificación.',
+      });
+    }
+  }
+);
 
 export default router;

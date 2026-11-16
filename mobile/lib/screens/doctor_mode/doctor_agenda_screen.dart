@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../models/appointment.dart';
+import '../notifications/notifications_sheet.dart';
 
 class DoctorAgendaScreen extends StatefulWidget {
   const DoctorAgendaScreen({super.key});
@@ -17,6 +18,7 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
   List<Appointment> _allAppointments = [];
   String _selectedFilter = 'TODOS';
   final Map<String, bool> _actionLoading = {};
+  int _unreadNotifs = 0;
 
   @override
   void initState() {
@@ -44,9 +46,18 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
       // Ordenar por fecha de atención
       list.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
 
+      int unread = 0;
+      try {
+        final notifRes = await _apiClient.get('/api/notifications');
+        if (notifRes is Map<String, dynamic>) {
+          unread = (notifRes['unreadCount'] as num?)?.toInt() ?? 0;
+        }
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _allAppointments = list;
+          _unreadNotifs = unread;
           _isLoading = false;
         });
       }
@@ -127,6 +138,55 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
       appBar: AppBar(
         title: const Text('Mi Agenda Médica'),
         actions: [
+          IconButton(
+            onPressed: () {
+              NotificationsSheet.show(
+                context,
+                onUpdated: () async {
+                  try {
+                    final notifRes = await _apiClient.get('/api/notifications');
+                    if (notifRes is Map<String, dynamic> && mounted) {
+                      setState(() {
+                        _unreadNotifs =
+                            (notifRes['unreadCount'] as num?)?.toInt() ?? 0;
+                      });
+                    }
+                  } catch (_) {}
+                },
+              );
+            },
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.notifications_outlined),
+                if (_unreadNotifs > 0)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AppTheme.error,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '$_unreadNotifs',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadAppointments,

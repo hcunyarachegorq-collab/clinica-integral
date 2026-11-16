@@ -11,6 +11,7 @@ import appointmentRoutes from './routes/appointment.routes';
 import medicalRecordRoutes from './routes/medical-record.routes';
 import patientRoutes from './routes/patient.routes';
 import analyticsRoutes from './routes/analytics.routes';
+import notificationRoutes from './routes/notification.routes';
 
 dotenv.config();
 
@@ -112,6 +113,7 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Inicio del servidor HTTP
 const server = app.listen(Number(port), '0.0.0.0', () => {

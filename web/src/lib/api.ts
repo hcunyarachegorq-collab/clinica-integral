@@ -41,6 +41,14 @@ export interface DoctorSchedule {
   slotDurationMinutes: number;
 }
 
+export interface DoctorRecentReview {
+  id: string;
+  patientName: string;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+}
+
 export interface Doctor {
   id: string;
   userId: string;
@@ -51,6 +59,9 @@ export interface Doctor {
   licenseNumber: string;
   bio?: string | null;
   consultationFee: number;
+  averageRating?: number;
+  reviewCount?: number;
+  recentReviews?: DoctorRecentReview[];
   schedules: DoctorSchedule[];
 }
 
@@ -111,8 +122,30 @@ export interface Appointment {
   };
   triage?: Triage | null;
   hasMedicalRecord?: boolean;
+  review?: {
+    id: string;
+    rating: number;
+    comment?: string | null;
+    createdAt: string;
+  } | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface NotificationsResponse {
+  count: number;
+  unreadCount: number;
+  notifications: NotificationItem[];
 }
 
 export interface MedicalRecord {
@@ -535,6 +568,36 @@ class ApiService {
     data: { fileName: string; fileType: string; fileDataUrl: string }
   ): Promise<{ message: string; attachment: MedicalAttachment }> {
     return this.request<{ message: string; attachment: MedicalAttachment }>(`/api/medical-records/${recordId}/attachments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Notificaciones
+  async getNotifications(): Promise<NotificationsResponse> {
+    return this.request<NotificationsResponse>('/api/notifications', {
+      method: 'GET',
+    });
+  }
+
+  async markNotificationAsRead(id: string): Promise<{ message: string; notification: NotificationItem }> {
+    return this.request<{ message: string; notification: NotificationItem }>(`/api/notifications/${id}/read`, {
+      method: 'PATCH',
+    });
+  }
+
+  async markAllNotificationsAsRead(): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/api/notifications/read-all', {
+      method: 'PATCH',
+    });
+  }
+
+  // Calificación / Reseña Médica
+  async createDoctorReview(
+    appointmentId: string,
+    data: { rating: number; comment?: string }
+  ): Promise<{ message: string; review: any }> {
+    return this.request<{ message: string; review: any }>(`/api/appointments/${appointmentId}/review`, {
       method: 'POST',
       body: JSON.stringify(data),
     });

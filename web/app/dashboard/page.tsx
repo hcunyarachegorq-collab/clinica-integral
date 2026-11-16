@@ -46,6 +46,8 @@ import {
   Paperclip,
   Trash2,
   FolderOpen,
+  Bell,
+  Star,
 } from 'lucide-react';
 import {
   api,
@@ -62,6 +64,7 @@ import {
   DoctorBlockedDate,
   MedicalAttachment,
   PatientSearchResult,
+  NotificationItem,
 } from '../../src/lib/api';
 import { useAuth } from '../../src/context/AuthContext';
 
@@ -129,6 +132,19 @@ function DashboardContent() {
   const [uploadingAttachment, setUploadingAttachment] = useState<boolean>(false);
   const [uploadAttachmentError, setUploadAttachmentError] = useState<string | null>(null);
   const [viewAttachmentModal, setViewAttachmentModal] = useState<MedicalAttachment | null>(null);
+
+  // Estados para Notificaciones
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [showNotifDropdown, setShowNotifDropdown] = useState<boolean>(false);
+
+  // Estados para Calificación / Reseña Médica (Paciente)
+  const [selectedAppForReview, setSelectedAppForReview] = useState<Appointment | null>(null);
+  const [reviewRating, setReviewRating] = useState<number>(5);
+  const [hoverRating, setHoverRating] = useState<number>(0);
+  const [reviewComment, setReviewComment] = useState<string>('');
+  const [reviewSubmitting, setReviewSubmitting] = useState<boolean>(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   // Filtro de estado de citas
   const [statusFilter, setStatusFilter] = useState<string>('TODOS');
@@ -216,16 +232,19 @@ function DashboardContent() {
     if (!user) return;
     setLoadingData(true);
     try {
-      const [appRes, recRes, specRes, docRes] = await Promise.all([
+      const [appRes, recRes, specRes, docRes, notifRes] = await Promise.all([
         api.getAppointments(),
         api.getMedicalRecords(),
         api.getSpecialties(),
         api.getDoctors(),
+        api.getNotifications().catch(() => ({ notifications: [], unreadCount: 0 })),
       ]);
       setAppointments(appRes.appointments);
       setMedicalRecords(recRes.medicalRecords);
       setSpecialties(specRes.specialties);
       setDoctors(docRes.doctors);
+      setNotifications(notifRes.notifications);
+      setUnreadNotifCount(notifRes.unreadCount);
 
       if (user.role === 'ADMIN') {
         const anaRes = await api.getAnalyticsSummary();
@@ -782,6 +801,52 @@ function DashboardContent() {
     document.body.removeChild(link);
   };
 
+  // Manejador: Notificaciones
+  const handleMarkNotifAsRead = async (id: string) => {
+    try {
+      await api.markNotificationAsRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      );
+      setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+    } catch (err: any) {
+      console.error('Error al marcar notificación:', err);
+    }
+  };
+
+  const handleMarkAllNotifsAsRead = async () => {
+    try {
+      await api.markAllNotificationsAsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setUnreadNotifCount(0);
+    } catch (err: any) {
+      console.error('Error al marcar todas las notificaciones como leídas:', err);
+    }
+  };
+
+  // Manejador: Enviar Calificación de Atención Médica
+  const handleSendReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAppForReview) return;
+    setReviewSubmitting(true);
+    setReviewError(null);
+    try {
+      await api.createDoctorReview(selectedAppForReview.id, {
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+      });
+      alert('¡Muchas gracias por calificar la atención médica recibida!');
+      setSelectedAppForReview(null);
+      setReviewComment('');
+      setReviewRating(5);
+      loadDashboardData();
+    } catch (err: any) {
+      setReviewError(err.message || 'Error al enviar calificación');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   const getDayName = (day: number) => {
     const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     return days[day] || '';
@@ -1029,7 +1094,7 @@ function DashboardContent() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-xs font-bold text-white">{user.fullName}</span>
               <span className="text-[11px] text-slate-400">{user.email}</span>
@@ -1037,6 +1102,78 @@ function DashboardContent() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
               {user.role}
             </span>
+
+            {/* Campana de Notificaciones */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+                className="relative p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white transition-all"
+                title="Notificaciones"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-lg animate-pulse">
+                    {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotifDropdown && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <Bell className="h-4 w-4 text-teal-400" />
+                      <h4 className="font-bold text-sm text-white">Notificaciones</h4>
+                      {unreadNotifCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
+                          {unreadNotifCount} nuevas
+                        </span>
+                      )}
+                    </div>
+                    {unreadNotifCount > 0 && (
+                      <button
+                        onClick={handleMarkAllNotifsAsRead}
+                        className="text-xs text-teal-400 hover:text-teal-300 font-semibold"
+                      >
+                        Marcar todas leídas
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-3 max-h-80 overflow-y-auto space-y-2 divide-y divide-slate-800/40">
+                    {notifications.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-slate-500">
+                        No tienes notificaciones
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => !notif.isRead && handleMarkNotifAsRead(notif.id)}
+                          className={`pt-2.5 pb-2 px-2.5 rounded-xl transition-all cursor-pointer ${
+                            notif.isRead
+                              ? 'bg-transparent text-slate-400'
+                              : 'bg-slate-800/60 text-slate-200 border-l-2 border-teal-400'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-xs font-semibold text-white">{notif.title}</span>
+                            <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                              {new Date(notif.createdAt).toLocaleDateString('es-ES', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{notif.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={logout}
               className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-rose-950/30 hover:border-rose-900 text-slate-400 hover:text-rose-400 transition-all"
@@ -1245,7 +1382,7 @@ function DashboardContent() {
                             .filter((d) => !bookSpecialtyId || d.specialty?.id === bookSpecialtyId)
                             .map((d) => (
                               <option key={d.id} value={d.id}>
-                                {d.fullName} - Tarifa: ${d.consultationFee.toFixed(2)}
+                                {d.fullName} - Tarifa: ${d.consultationFee.toFixed(2)}{d.averageRating && d.averageRating > 0 ? ` (★ ${d.averageRating.toFixed(1)})` : ''}
                               </option>
                             ))}
                         </select>
@@ -1402,21 +1539,54 @@ function DashboardContent() {
                               </div>
                             )}
 
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                              {app.paymentStatus === 'PAID' ? (
-                                <button
-                                  onClick={() => {
-                                    setPrintReceiptApp(app);
-                                    setTimeout(() => window.print(), 150);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all"
-                                >
-                                  <Receipt className="h-3.5 w-3.5" />
-                                  <span>Descargar / Imprimir Recibo</span>
-                                </button>
-                              ) : (
-                                <span className="text-xs text-slate-500 italic">Pago en recepción o caja</span>
-                              )}
+                            {/* Reseña / Calificación del Paciente */}
+                            {app.review && (
+                              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                                <Star className="h-4 w-4 fill-amber-400 text-amber-400 flex-shrink-0" />
+                                <div>
+                                  <span className="font-bold">Tu Calificación: </span>
+                                  <span className="font-semibold text-amber-200">{app.review.rating} / 5</span>
+                                  {app.review.comment && (
+                                    <span className="text-slate-300 italic ml-1">
+                                      &ldquo;{app.review.comment}&rdquo;
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                              <div className="flex items-center gap-2">
+                                {app.paymentStatus === 'PAID' ? (
+                                  <button
+                                    onClick={() => {
+                                      setPrintReceiptApp(app);
+                                      setTimeout(() => window.print(), 150);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all"
+                                  >
+                                    <Receipt className="h-3.5 w-3.5" />
+                                    <span>Descargar / Imprimir Recibo</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-slate-500 italic">Pago en recepción o caja</span>
+                                )}
+
+                                {app.status === 'COMPLETED' && !app.review && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedAppForReview(app);
+                                      setReviewRating(5);
+                                      setReviewComment('');
+                                      setReviewError('');
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all"
+                                  >
+                                    <Star className="h-3.5 w-3.5 fill-amber-400" />
+                                    <span>Calificar Atención</span>
+                                  </button>
+                                )}
+                              </div>
 
                               {(app.status === 'PENDING' || app.status === 'CONFIRMED') && (
                                 <button
@@ -3329,7 +3499,7 @@ function DashboardContent() {
                   <option value="">-- Elige un médico especialista --</option>
                   {doctors.map((doc) => (
                     <option key={doc.id} value={doc.id}>
-                      {doc.fullName} — {doc.specialty.name} (${doc.consultationFee.toFixed(2)})
+                      {doc.fullName} — {doc.specialty.name} (${doc.consultationFee.toFixed(2)}){doc.averageRating && doc.averageRating > 0 ? ` (★ ${doc.averageRating.toFixed(1)})` : ''}
                     </option>
                   ))}
                 </select>
@@ -3497,6 +3667,102 @@ function DashboardContent() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Calificar Atención de Cita */}
+      {selectedAppForReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+                  <Star className="h-5 w-5 fill-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">Calificar Atención</h3>
+                  <p className="text-xs text-slate-400">{selectedAppForReview.doctor.fullName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedAppForReview(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {reviewError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300">
+                {reviewError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="text-center space-y-2">
+                <span className="text-xs font-semibold text-slate-300 block">¿Cómo calificarías tu experiencia?</span>
+                <div className="flex items-center justify-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      onClick={() => setReviewRating(star)}
+                      className="p-1 transition-transform hover:scale-110"
+                    >
+                      <Star
+                        className={`h-8 w-8 transition-colors ${
+                          (hoverRating || reviewRating) >= star
+                            ? 'text-amber-400 fill-amber-400'
+                            : 'text-slate-600'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs font-bold text-amber-400">
+                  {(hoverRating || reviewRating) === 1 && '1 / 5 - Muy insatisfecho'}
+                  {(hoverRating || reviewRating) === 2 && '2 / 5 - Insatisfecho'}
+                  {(hoverRating || reviewRating) === 3 && '3 / 5 - Regular'}
+                  {(hoverRating || reviewRating) === 4 && '4 / 5 - Buena atención'}
+                  {(hoverRating || reviewRating) === 5 && '5 / 5 - ¡Excelente atención!'}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Comentario u opinión (opcional):
+                </label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Comparte detalles de la atención médica brindada..."
+                  rows={3}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAppForReview(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendReview}
+                  disabled={reviewSubmitting}
+                  className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {reviewSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span>Enviar Calificación</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

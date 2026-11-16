@@ -54,6 +54,8 @@ class Doctor {
   final double consultationFee;
   final Specialty? specialty;
   final List<DoctorSchedule> schedules;
+  final double averageRating;
+  final int reviewCount;
 
   Doctor({
     required this.id,
@@ -66,6 +68,8 @@ class Doctor {
     required this.consultationFee,
     this.specialty,
     this.schedules = const [],
+    this.averageRating = 0.0,
+    this.reviewCount = 0,
   });
 
   factory Doctor.fromJson(Map<String, dynamic> json) {
@@ -99,6 +103,10 @@ class Doctor {
       }
     }
 
+    final averageRating =
+        (json['averageRating'] as num?)?.toDouble() ?? 0.0;
+    final reviewCount = (json['reviewCount'] as num?)?.toInt() ?? 0;
+
     return Doctor(
       id: json['id'] as String? ?? '',
       userId: json['userId'] as String? ?? '',
@@ -110,12 +118,19 @@ class Doctor {
       consultationFee: (json['consultationFee'] as num?)?.toDouble() ?? 0.0,
       specialty: specialty,
       schedules: schedulesList,
+      averageRating: averageRating,
+      reviewCount: reviewCount,
     );
   }
 
   String get specialtyName => specialty?.name ?? 'Medicina General';
 
   String get formattedFee => 'S/ ${consultationFee.toStringAsFixed(2)}';
+
+  String get ratingSummary {
+    if (reviewCount == 0) return 'Nuevo';
+    return '${averageRating.toStringAsFixed(1)} ★ ($reviewCount)';
+  }
 
   String get workingDaysSummary {
     if (schedules.isEmpty) return 'Consultar disponibilidad';

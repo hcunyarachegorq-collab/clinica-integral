@@ -53,6 +53,30 @@ class Triage {
   }
 }
 
+class AppointmentReview {
+  final String id;
+  final int rating;
+  final String? comment;
+  final DateTime createdAt;
+
+  AppointmentReview({
+    required this.id,
+    required this.rating,
+    this.comment,
+    required this.createdAt,
+  });
+
+  factory AppointmentReview.fromJson(Map<String, dynamic> json) {
+    return AppointmentReview(
+      id: json['id'] as String? ?? '',
+      rating: (json['rating'] as num?)?.toInt() ?? 5,
+      comment: json['comment'] as String?,
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+          DateTime.now(),
+    );
+  }
+}
+
 class Appointment {
   final String id;
   final String? patientId;
@@ -71,6 +95,7 @@ class Appointment {
   final String? doctorLicenseNumber;
   final String? patientFullName;
   final Triage? triage;
+  final AppointmentReview? review;
 
   Appointment({
     required this.id,
@@ -90,6 +115,7 @@ class Appointment {
     this.doctorLicenseNumber,
     this.patientFullName,
     this.triage,
+    this.review,
   });
 
   factory Appointment.fromJson(Map<String, dynamic> json) {
@@ -132,6 +158,11 @@ class Appointment {
       triage = Triage.fromJson(json['triage'] as Map<String, dynamic>);
     }
 
+    AppointmentReview? review;
+    if (json['review'] != null && json['review'] is Map) {
+      review = AppointmentReview.fromJson(json['review'] as Map<String, dynamic>);
+    }
+
     return Appointment(
       id: json['id'] as String? ?? '',
       patientId: json['patientId'] as String?,
@@ -153,6 +184,7 @@ class Appointment {
       doctorLicenseNumber: docLicense,
       patientFullName: patName,
       triage: triage,
+      review: review,
     );
   }
 

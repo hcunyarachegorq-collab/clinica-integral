@@ -108,6 +108,20 @@ router.post(
         return record;
       });
 
+      // Disparar notificación automática al paciente sobre su receta médica
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: result.patient.id,
+            title: 'Receta Médica y Diagnóstico Disponible',
+            message: `El/La Dr(a). ${result.doctor.user.fullName} (${result.doctor.specialty.name}) ha emitido tu receta médica y diagnóstico. Ya puedes revisarla y descargarla en PDF.`,
+            type: 'MEDICAL_RECORD',
+          },
+        });
+      } catch (notifErr) {
+        console.error('Error al generar notificación de receta para el paciente:', notifErr);
+      }
+
       return res.status(201).json({
         message: 'Registro médico guardado y cita médica completada con éxito',
         medicalRecord: {

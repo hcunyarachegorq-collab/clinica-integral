@@ -48,6 +48,8 @@ model User {
   doctorProfile  DoctorProfile?
   appointments   Appointment[]
   medicalRecords MedicalRecord[] @relation("PatientRecords")
+  notifications  Notification[]
+  reviews        DoctorReview[]  @relation("PatientReviews")
 
   @@map("users")
 }
@@ -77,6 +79,7 @@ model DoctorProfile {
   appointments    Appointment[]
   medicalRecords  MedicalRecord[]
   blockedDates    DoctorBlockedDate[]
+  reviews         DoctorReview[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -119,6 +122,7 @@ model Appointment {
 
   medicalRecord MedicalRecord?
   triage        Triage?
+  review        DoctorReview?
 
   @@map("appointments")
 }
@@ -179,4 +183,32 @@ model MedicalAttachment {
   createdAt       DateTime      @default(now())
 
   @@map("medical_attachments")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   // "APPOINTMENT", "MEDICAL_RECORD", "SYSTEM"
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model DoctorReview {
+  id            String        @id @default(uuid())
+  appointmentId String        @unique
+  appointment   Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patientId     String
+  patient       User          @relation("PatientReviews", fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId      String
+  doctor        DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  rating        Int           // 1 a 5
+  comment       String?
+  createdAt     DateTime      @default(now())
+
+  @@map("doctor_reviews")
 }

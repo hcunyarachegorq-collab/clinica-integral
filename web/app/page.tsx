@@ -21,6 +21,7 @@ import {
   Phone,
   MapPin,
   Sparkles,
+  Star,
 } from 'lucide-react';
 import { api, Specialty, Doctor } from '../src/lib/api';
 import { useAuth } from '../src/context/AuthContext';
@@ -327,6 +328,17 @@ export default function LandingPage() {
                         <p className="text-xs text-teal-400 font-medium">
                           {doc.specialty?.name}
                         </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-amber-400 font-bold text-xs flex items-center gap-0.5">
+                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                            {doc.averageRating && doc.averageRating > 0 ? doc.averageRating.toFixed(1) : 'Nuevo'}
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            {doc.reviewCount && doc.reviewCount > 0
+                              ? `(${doc.reviewCount} ${doc.reviewCount === 1 ? 'reseña' : 'reseñas'})`
+                              : '(Sin reseñas)'}
+                          </span>
+                        </div>
                         <p className="text-xs text-slate-400 mt-0.5">
                           Colegiatura: <span className="font-mono text-slate-300">{doc.licenseNumber}</span>
                         </p>

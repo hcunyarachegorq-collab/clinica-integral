@@ -5,6 +5,7 @@ import '../../core/app_theme.dart';
 import '../../models/appointment.dart';
 import '../../models/specialty.dart';
 import '../../providers/auth_provider.dart';
+import '../notifications/notifications_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   final Function(int) onNavigateTab;
@@ -19,11 +20,23 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   List<Specialty> _specialties = [];
   Appointment? _nextAppointment;
+  int _unreadNotifs = 0;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  Future<void> _loadNotificationsCount() async {
+    try {
+      final notifRes = await _apiClient.get('/api/notifications');
+      if (notifRes is Map<String, dynamic> && mounted) {
+        setState(() {
+          _unreadNotifs = (notifRes['unreadCount'] as num?)?.toInt() ?? 0;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadData() async {
@@ -61,10 +74,20 @@ class _HomeScreenState extends State<HomeScreen> {
         // En caso de que no tenga citas o falle
       }
 
+      // 3. Notificaciones no leídas
+      int unread = 0;
+      try {
+        final notifRes = await _apiClient.get('/api/notifications');
+        if (notifRes is Map<String, dynamic>) {
+          unread = (notifRes['unreadCount'] as num?)?.toInt() ?? 0;
+        }
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _specialties = specialties;
           _nextAppointment = nextApp;
+          _unreadNotifs = unread;
           _isLoading = false;
         });
       }
@@ -150,27 +173,75 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryLight,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: const Color(0xFFBAE6FD), width: 1.5),
-                      ),
-                      child: Center(
-                        child: Text(
-                          patientName.isNotEmpty
-                              ? patientName[0].toUpperCase()
-                              : 'P',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primary,
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            NotificationsSheet.show(
+                              context,
+                              onUpdated: _loadNotificationsCount,
+                            );
+                          },
+                          icon: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              const Icon(
+                                Icons.notifications_outlined,
+                                color: AppTheme.textPrimary,
+                                size: 26,
+                              ),
+                              if (_unreadNotifs > 0)
+                                Positioned(
+                                  right: -2,
+                                  top: -2,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: AppTheme.error,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 16,
+                                      minHeight: 16,
+                                    ),
+                                    child: Text(
+                                      '$_unreadNotifs',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 4),
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryLight,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: const Color(0xFFBAE6FD), width: 1.5),
+                          ),
+                          child: Center(
+                            child: Text(
+                              patientName.isNotEmpty
+                                  ? patientName[0].toUpperCase()
+                                  : 'P',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
