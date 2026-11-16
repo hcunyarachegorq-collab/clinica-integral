@@ -3,6 +3,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../models/doctor.dart';
 import '../../models/specialty.dart';
+import '../../widgets/animated_components.dart';
 import '../appointments/book_appointment_screen.dart';
 
 class DoctorsScreen extends StatefulWidget {
@@ -184,7 +185,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           // Lista de Médicos
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: 4,
+                    separatorBuilder: (context, index) => const SizedBox(height: 14),
+                    itemBuilder: (context, index) => const ShimmerDoctorCard(),
+                  )
                 : _errorMessage != null
                     ? Center(
                         child: Column(
@@ -238,7 +244,10 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                                   const SizedBox(height: 14),
                               itemBuilder: (context, index) {
                                 final doctor = _filteredDoctors[index];
-                                return _buildDoctorCard(doctor);
+                                return FadeSlideEntry(
+                                  delay: Duration(milliseconds: 35 * index),
+                                  child: _buildDoctorCard(doctor),
+                                );
                               },
                             ),
                           ),
@@ -258,17 +267,20 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: AppTheme.primaryLight,
-                  child: Text(
-                    doctor.fullName.isNotEmpty
-                        ? doctor.fullName.split(' ').first[0]
-                        : 'D',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primary,
+                Hero(
+                  tag: 'doctor_avatar_${doctor.id}',
+                  child: CircleAvatar(
+                    radius: 26,
+                    backgroundColor: AppTheme.primaryLight,
+                    child: Text(
+                      doctor.fullName.isNotEmpty
+                          ? doctor.fullName.split(' ').first[0]
+                          : 'D',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primary,
+                      ),
                     ),
                   ),
                 ),
@@ -404,18 +416,27 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => BookAppointmentScreen(doctor: doctor),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.event_available_rounded, size: 18),
-                label: const Text('Agendar Cita'),
+            BouncyButton(
+              onTap: () {
+                Navigator.of(context).push(
+                  SlideFadePageRoute(
+                    page: BookAppointmentScreen(doctor: doctor),
+                  ),
+                );
+              },
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      SlideFadePageRoute(
+                        page: BookAppointmentScreen(doctor: doctor),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.event_available_rounded, size: 18),
+                  label: const Text('Agendar Cita'),
+                ),
               ),
             ),
           ],

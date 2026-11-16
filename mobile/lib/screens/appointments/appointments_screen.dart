@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../models/appointment.dart';
+import '../../widgets/animated_components.dart';
 
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
@@ -186,19 +187,22 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: List.generate(5, (index) {
                       final starValue = index + 1;
-                      return IconButton(
-                        iconSize: 32,
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          starValue <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
-                          color: const Color(0xFFD97706),
-                        ),
-                        onPressed: () {
+                      return BouncyButton(
+                        onTap: () {
                           setDialogState(() {
                             rating = starValue;
                           });
                         },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                          child: Icon(
+                            starValue <= rating
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            color: const Color(0xFFD97706),
+                            size: 34,
+                          ),
+                        ),
                       );
                     }),
                   ),
@@ -342,7 +346,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           // Contenido Principal
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: 4,
+                    separatorBuilder: (context, index) => const SizedBox(height: 14),
+                    itemBuilder: (context, index) => const ShimmerAppointmentCard(),
+                  )
                 : _errorMessage != null
                     ? Center(
                         child: Column(
@@ -399,7 +408,10 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                                   const SizedBox(height: 14),
                               itemBuilder: (context, index) {
                                 final app = _filteredAppointments[index];
-                                return _buildAppointmentCard(app);
+                                return FadeSlideEntry(
+                                  delay: Duration(milliseconds: 35 * index),
+                                  child: _buildAppointmentCard(app),
+                                );
                               },
                             ),
                           ),

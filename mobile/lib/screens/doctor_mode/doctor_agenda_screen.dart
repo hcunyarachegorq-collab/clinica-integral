@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../models/appointment.dart';
+import '../../widgets/animated_components.dart';
 import '../notifications/notifications_sheet.dart';
 
 class DoctorAgendaScreen extends StatefulWidget {
@@ -136,7 +137,17 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Mi Agenda Médica'),
+        title: Row(
+          children: const [
+            Text('Mi Agenda Médica'),
+            SizedBox(width: 8),
+            LivePulseBadge(
+              label: 'Activa',
+              color: AppTheme.primary,
+              fontSize: 10,
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             onPressed: () {
@@ -202,36 +213,39 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // KPIs SUPERIORES
-              Row(
-                children: [
-                  _buildKpiCard(
-                    title: 'Total Citas',
-                    count: _allAppointments.length,
-                    color: AppTheme.primary,
-                    bgColor: const Color(0xFFF0FDFA),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildKpiCard(
-                    title: 'Pendientes',
-                    count: pendingCount,
-                    color: const Color(0xFFD97706),
-                    bgColor: const Color(0xFFFEF3C7),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildKpiCard(
-                    title: 'Confirmadas',
-                    count: confirmedCount,
-                    color: const Color(0xFF0284C7),
-                    bgColor: const Color(0xFFE0F2FE),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildKpiCard(
-                    title: 'Listas',
-                    count: completedCount,
-                    color: const Color(0xFF059669),
-                    bgColor: const Color(0xFFD1FAE5),
-                  ),
-                ],
+              FadeSlideEntry(
+                delay: const Duration(milliseconds: 60),
+                child: Row(
+                  children: [
+                    _buildKpiCard(
+                      title: 'Total Citas',
+                      count: _allAppointments.length,
+                      color: AppTheme.primary,
+                      bgColor: const Color(0xFFF0FDFA),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildKpiCard(
+                      title: 'Pendientes',
+                      count: pendingCount,
+                      color: const Color(0xFFD97706),
+                      bgColor: const Color(0xFFFEF3C7),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildKpiCard(
+                      title: 'Confirmadas',
+                      count: confirmedCount,
+                      color: const Color(0xFF0284C7),
+                      bgColor: const Color(0xFFE0F2FE),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildKpiCard(
+                      title: 'Listas',
+                      count: completedCount,
+                      color: const Color(0xFF059669),
+                      bgColor: const Color(0xFFD1FAE5),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -259,10 +273,13 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
 
               // LISTADO DE CITAS
               if (_isLoading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 50),
-                    child: CircularProgressIndicator(),
+                Column(
+                  children: List.generate(
+                    4,
+                    (i) => const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: ShimmerAppointmentCard(),
+                    ),
                   ),
                 )
               else if (_errorMessage != null)
@@ -325,7 +342,10 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                       const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final app = _filteredAppointments[index];
-                    return _buildDoctorAppointmentCard(app);
+                    return FadeSlideEntry(
+                      delay: Duration(milliseconds: 35 * index),
+                      child: _buildDoctorAppointmentCard(app),
+                    );
                   },
                 ),
             ],
@@ -605,31 +625,37 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                 children: [
                   if (app.isPending) ...[
                     Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: isBusy
+                      child: BouncyButton(
+                        onTap: isBusy
                             ? null
                             : () => _updateAppointmentStatus(
                                 app.id, 'CONFIRMED'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0284C7),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        icon: isBusy
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.check_circle_rounded, size: 16),
-                        label: const Text(
-                          'Confirmar',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                        child: ElevatedButton.icon(
+                          onPressed: isBusy
+                              ? null
+                              : () => _updateAppointmentStatus(
+                                  app.id, 'CONFIRMED'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          icon: isBusy
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.check_circle_rounded, size: 16),
+                          label: const Text(
+                            'Confirmar',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -637,51 +663,53 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                     const SizedBox(width: 8),
                   ],
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: isBusy
-                          ? null
-                          : () async {
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('¿Cancelar Cita?'),
-                                  content: Text(
-                                    '¿Confirmas que deseas cancelar la cita de ${app.patientFullName ?? "este paciente"}?',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.of(ctx).pop(false),
-                                      child: const Text('No'),
+                    child: BouncyButton(
+                      child: OutlinedButton.icon(
+                        onPressed: isBusy
+                            ? null
+                            : () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('¿Cancelar Cita?'),
+                                    content: Text(
+                                      '¿Confirmas que deseas cancelar la cita de ${app.patientFullName ?? "este paciente"}?',
                                     ),
-                                    ElevatedButton(
-                                      onPressed: () =>
-                                          Navigator.of(ctx).pop(true),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppTheme.error,
-                                        foregroundColor: Colors.white,
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(false),
+                                        child: const Text('No'),
                                       ),
-                                      child: const Text('Sí, Cancelar'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirm == true) {
-                                await _updateAppointmentStatus(
-                                    app.id, 'CANCELLED');
-                              }
-                            },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.error,
-                        side: const BorderSide(color: AppTheme.error),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                      icon: const Icon(Icons.cancel_rounded, size: 16),
-                      label: const Text(
-                        'Cancelar',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(true),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppTheme.error,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: const Text('Sí, Cancelar'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await _updateAppointmentStatus(
+                                      app.id, 'CANCELLED');
+                                }
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.error,
+                          side: const BorderSide(color: AppTheme.error),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        icon: const Icon(Icons.cancel_rounded, size: 16),
+                        label: const Text(
+                          'Cancelar',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),

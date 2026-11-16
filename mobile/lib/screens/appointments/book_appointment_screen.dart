@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../models/doctor.dart';
+import '../../widgets/animated_components.dart';
 
 class BookAppointmentScreen extends StatefulWidget {
   final Doctor doctor;
@@ -288,11 +289,14 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: AppTheme.primaryLight,
-                        child: const Icon(Icons.medical_services_rounded,
-                            color: AppTheme.primary),
+                      Hero(
+                        tag: 'doctor_avatar_${widget.doctor.id}',
+                        child: CircleAvatar(
+                          radius: 24,
+                          backgroundColor: AppTheme.primaryLight,
+                          child: const Icon(Icons.medical_services_rounded,
+                              color: AppTheme.primary),
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -357,9 +361,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              InkWell(
+              BouncyButton(
                 onTap: _selectDate,
-                borderRadius: BorderRadius.circular(12),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 14),
@@ -406,117 +409,135 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
               ),
               const SizedBox(height: 10),
 
-              if (_isLoadingSlots)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  ),
-                )
-              else if (_isBlocked)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFFBEB), // Amber-50
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFDE68A)), // Amber-200
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.event_busy_rounded,
-                        color: Color(0xFFD97706),
-                        size: 22,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Fecha No Disponible / Descanso Médico',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF92400E),
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              _blockedReason != null &&
-                                      _blockedReason!.trim().isNotEmpty
-                                  ? 'El profesional médico no atenderá en esta fecha por el siguiente motivo: "$_blockedReason".'
-                                  : 'El profesional médico no tiene turnos asignados en esta fecha por descanso o capacitación.',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFFB45309),
-                                height: 1.3,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Por favor elige otra fecha disponible en el calendario.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF78350F),
-                              ),
-                            ),
-                          ],
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: _isLoadingSlots
+                    ? const Center(
+                        key: ValueKey('loading_slots'),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
                         ),
-                      ),
-                    ],
-                  ),
-                )
-              else if (_slotErrorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFFECACA)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline_rounded,
-                          color: AppTheme.error, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _slotErrorMessage!,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF991B1B),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _availableSlots.map((slot) {
-                    final isSelected = _selectedSlot == slot;
-                    return ChoiceChip(
-                      label: Text(slot),
-                      selected: isSelected,
-                      selectedColor: AppTheme.primary,
-                      labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : AppTheme.textPrimary,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.w500,
-                      ),
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedSlot = selected ? slot : null;
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
+                      )
+                    : _isBlocked
+                        ? Container(
+                            key: const ValueKey('blocked_slots'),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFFBEB),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFFDE68A)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.event_busy_rounded,
+                                  color: Color(0xFFD97706),
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Fecha No Disponible / Descanso Médico',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF92400E),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        _blockedReason != null &&
+                                                _blockedReason!.trim().isNotEmpty
+                                            ? 'El profesional médico no atenderá en esta fecha por el siguiente motivo: "$_blockedReason".'
+                                            : 'El profesional médico no tiene turnos asignados en esta fecha por descanso o capacitación.',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFFB45309),
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        'Por favor elige otra fecha disponible en el calendario.',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF78350F),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _slotErrorMessage != null
+                            ? Container(
+                                key: const ValueKey('error_slots'),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFFFECACA)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline_rounded,
+                                        color: AppTheme.error, size: 20),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        _slotErrorMessage!,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF991B1B),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : Wrap(
+                                key: const ValueKey('available_slots'),
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: _availableSlots.map((slot) {
+                                  final isSelected = _selectedSlot == slot;
+                                  return BouncyButton(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedSlot = isSelected ? null : slot;
+                                      });
+                                    },
+                                    child: ChoiceChip(
+                                      label: Text(slot),
+                                      selected: isSelected,
+                                      selectedColor: AppTheme.primary,
+                                      labelStyle: TextStyle(
+                                        color: isSelected
+                                            ? Colors.white
+                                            : AppTheme.textPrimary,
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.w500,
+                                      ),
+                                      onSelected: (selected) {
+                                        setState(() {
+                                          _selectedSlot = selected ? slot : null;
+                                        });
+                                      },
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+              ),
 
               const SizedBox(height: 24),
 
@@ -569,20 +590,23 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
               const SizedBox(height: 32),
 
               // Botón Confirmar
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting || _isLoadingSlots ? null : _submitBooking,
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Confirmar y Reservar Cita'),
+              BouncyButton(
+                onTap: _isSubmitting || _isLoadingSlots ? null : _submitBooking,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting || _isLoadingSlots ? null : _submitBooking,
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Confirmar y Reservar Cita'),
+                  ),
                 ),
               ),
             ],

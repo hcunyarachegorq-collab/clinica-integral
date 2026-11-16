@@ -5,6 +5,7 @@ import '../../core/app_theme.dart';
 import '../../models/appointment.dart';
 import '../../models/specialty.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/animated_components.dart';
 import '../notifications/notifications_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -160,6 +161,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   color: AppTheme.textPrimary,
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              const LivePulseBadge(label: 'En Línea'),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -259,21 +262,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 12),
 
                 if (_isLoading)
-                  Container(
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppTheme.border),
-                    ),
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
-                    ),
-                  )
+                  const ShimmerAppointmentCard()
                 else if (_nextAppointment != null)
-                  _buildNextAppointmentCard(_nextAppointment!)
+                  FadeSlideEntry(
+                    delay: const Duration(milliseconds: 60),
+                    child: _buildNextAppointmentCard(_nextAppointment!),
+                  )
                 else
-                  _buildNoAppointmentCard(),
+                  FadeSlideEntry(
+                    delay: const Duration(milliseconds: 60),
+                    child: _buildNoAppointmentCard(),
+                  ),
 
                 const SizedBox(height: 28),
 
@@ -488,11 +487,14 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(height: 24, color: AppTheme.border),
             Row(
               children: [
-                const CircleAvatar(
-                  backgroundColor: Color(0xFFF1F5F9),
-                  child: Icon(
-                    Icons.person_rounded,
-                    color: AppTheme.primary,
+                Hero(
+                  tag: 'doctor_avatar_${app.doctorId}',
+                  child: const CircleAvatar(
+                    backgroundColor: Color(0xFFF1F5F9),
+                    child: Icon(
+                      Icons.person_rounded,
+                      color: AppTheme.primary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -595,9 +597,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSpecialtyCard(Specialty specialty) {
-    return InkWell(
+    return BouncyButton(
       onTap: () => widget.onNavigateTab(1),
-      borderRadius: BorderRadius.circular(16),
       child: Container(
         width: 115,
         padding: const EdgeInsets.all(12),
@@ -605,6 +606,13 @@ class _HomeScreenState extends State<HomeScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppTheme.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

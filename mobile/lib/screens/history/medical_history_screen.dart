@@ -5,6 +5,7 @@ import '../../core/app_theme.dart';
 import '../../models/medical_record.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/pdf_recipe_service.dart';
+import '../../widgets/animated_components.dart';
 import '../profile/edit_profile_screen.dart';
 
 class MedicalHistoryScreen extends StatefulWidget {
@@ -193,15 +194,14 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          InkWell(
+                          BouncyButton(
                             onTap: () {
                               Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const EditProfileScreen(),
+                                SlideFadePageRoute(
+                                  page: const EditProfileScreen(),
                                 ),
                               );
                             },
-                            borderRadius: BorderRadius.circular(8),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),
@@ -249,10 +249,13 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
               const SizedBox(height: 12),
 
               if (_isLoading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: CircularProgressIndicator(),
+                Column(
+                  children: List.generate(
+                    3,
+                    (i) => const Padding(
+                      padding: EdgeInsets.only(bottom: 14),
+                      child: ShimmerAppointmentCard(),
+                    ),
                   ),
                 )
               else if (_errorMessage != null)
@@ -315,7 +318,10 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
                   separatorBuilder: (context, index) => const SizedBox(height: 16),
                   itemBuilder: (context, index) {
                     final record = _records[index];
-                    return _buildRecordCard(record, user);
+                    return FadeSlideEntry(
+                      delay: Duration(milliseconds: 35 * index),
+                      child: _buildRecordCard(record, user),
+                    );
                   },
                 ),
             ],
@@ -556,44 +562,48 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
 
             // Botón Oficial: Descargar / Imprimir Receta PDF
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  try {
-                    await PdfRecipeService.printPrescription(
-                      record: record,
-                      patientNameFallback: user?.fullName,
-                      patientEmailFallback: user?.email,
-                      patientPhoneFallback: user?.phone,
+            BouncyButton(
+              onTap: () async {
+                try {
+                  await PdfRecipeService.printPrescription(
+                    record: record,
+                    patientNameFallback: user?.fullName,
+                    patientEmailFallback: user?.email,
+                    patientPhoneFallback: user?.phone,
+                  );
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error al generar PDF: $e'),
+                        backgroundColor: AppTheme.error,
+                        behavior: SnackBarBehavior.floating,
+                      ),
                     );
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error al generar PDF: $e'),
-                          backgroundColor: AppTheme.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
                   }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                }
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                icon: const Icon(Icons.print_rounded, size: 18),
-                label: const Text(
-                  'Descargar / Imprimir Receta PDF',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.print_rounded, size: 18, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text(
+                      'Descargar / Imprimir Receta PDF',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
