@@ -49,9 +49,17 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
       // 1. Cargar Especialidades
       final specResponse = await _apiClient.get('/api/specialties');
       final specialties = <Specialty>[];
-      if (specResponse is List) {
-        for (final item in specResponse) {
-          specialties.add(Specialty.fromJson(item as Map<String, dynamic>));
+      final List? rawList = specResponse is List
+          ? specResponse
+          : (specResponse is Map<String, dynamic> &&
+                  specResponse['specialties'] is List)
+              ? specResponse['specialties'] as List
+              : null;
+      if (rawList != null) {
+        for (final item in rawList) {
+          if (item is Map<String, dynamic>) {
+            specialties.add(Specialty.fromJson(item));
+          }
         }
       }
 

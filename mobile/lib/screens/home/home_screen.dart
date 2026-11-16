@@ -49,9 +49,17 @@ class _HomeScreenState extends State<HomeScreen> {
       // 1. Cargar Especialidades
       final specResponse = await _apiClient.get('/api/specialties');
       final specialties = <Specialty>[];
-      if (specResponse is List) {
-        for (final item in specResponse) {
-          specialties.add(Specialty.fromJson(item as Map<String, dynamic>));
+      final List? rawList = specResponse is List
+          ? specResponse
+          : (specResponse is Map<String, dynamic> &&
+                  specResponse['specialties'] is List)
+              ? specResponse['specialties'] as List
+              : null;
+      if (rawList != null) {
+        for (final item in rawList) {
+          if (item is Map<String, dynamic>) {
+            specialties.add(Specialty.fromJson(item));
+          }
         }
       }
 
@@ -101,29 +109,36 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  IconData _getSpecialtyIcon(String? iconName) {
-    switch (iconName?.toLowerCase()) {
-      case 'heart':
-      case 'cardiology':
-        return Icons.favorite_rounded;
-      case 'brain':
-      case 'neurology':
-        return Icons.psychology_rounded;
-      case 'baby':
-      case 'pediatrics':
-        return Icons.child_care_rounded;
-      case 'bone':
-      case 'traumatology':
-        return Icons.accessibility_new_rounded;
-      case 'eye':
-      case 'ophthalmology':
-        return Icons.visibility_rounded;
-      case 'skin':
-      case 'dermatology':
-        return Icons.spa_rounded;
-      default:
-        return Icons.medical_services_rounded;
+  IconData _getSpecialtyIcon(String? iconName, [String? specialtyName]) {
+    final key = '${iconName ?? ""} ${specialtyName ?? ""}'.toLowerCase();
+    if (key.contains('heart') || key.contains('cardio')) {
+      return Icons.favorite_rounded;
+    } else if (key.contains('brain') ||
+        key.contains('neuro') ||
+        key.contains('psico')) {
+      return Icons.psychology_rounded;
+    } else if (key.contains('baby') || key.contains('pedia')) {
+      return Icons.child_care_rounded;
+    } else if (key.contains('bone') ||
+        key.contains('trauma') ||
+        key.contains('orto')) {
+      return Icons.accessibility_new_rounded;
+    } else if (key.contains('eye') || key.contains('oftalmo')) {
+      return Icons.visibility_rounded;
+    } else if (key.contains('skin') || key.contains('derma')) {
+      return Icons.spa_rounded;
+    } else if (key.contains('steth') ||
+        key.contains('general') ||
+        key.contains('medicina')) {
+      return Icons.medical_services_rounded;
+    } else if (key.contains('tooth') ||
+        key.contains('dental') ||
+        key.contains('odonto')) {
+      return Icons.masks_rounded;
+    } else if (key.contains('gyn') || key.contains('gineco')) {
+      return Icons.pregnant_woman_rounded;
     }
+    return Icons.health_and_safety_rounded;
   }
 
   @override
@@ -300,7 +315,39 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                if (_specialties.isEmpty && !_isLoading)
+                if (_isLoading && _specialties.isEmpty)
+                  SizedBox(
+                    height: 130,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 3,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 14),
+                      itemBuilder: (context, index) {
+                        return Container(
+                          width: 115,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppTheme.border),
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ShimmerBox(
+                                  width: 44, height: 44, borderRadius: 22),
+                              SizedBox(height: 10),
+                              ShimmerBox(width: 70, height: 12),
+                              SizedBox(height: 6),
+                              ShimmerBox(width: 45, height: 10),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  )
+                else if (_specialties.isEmpty)
                   const Text(
                     'No hay especialidades disponibles en este momento.',
                     style: TextStyle(color: AppTheme.textSecondary),
@@ -624,7 +671,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                _getSpecialtyIcon(specialty.iconName),
+                _getSpecialtyIcon(specialty.iconName, specialty.name),
                 color: AppTheme.primary,
                 size: 24,
               ),
