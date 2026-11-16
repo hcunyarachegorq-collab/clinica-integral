@@ -16,10 +16,12 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../src/context/AuthContext';
+import { useToast } from '../../src/context/ToastContext';
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+  const toast = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,9 +35,12 @@ export default function LoginPage() {
 
     try {
       await login({ email: email.trim(), password });
+      toast.success('¡Bienvenido al sistema!', 'Sesión iniciada correctamente');
       router.push('/dashboard');
     } catch (err: any) {
-      setErrorMessage(err.message || 'No se pudo iniciar sesión. Verifica tus credenciales.');
+      const msg = err.message || 'No se pudo iniciar sesión. Verifica tus credenciales.';
+      setErrorMessage(msg);
+      toast.error('Error de autenticación', msg);
     } finally {
       setIsSubmitting(false);
     }

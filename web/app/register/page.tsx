@@ -16,10 +16,12 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { useAuth } from '../../src/context/AuthContext';
+import { useToast } from '../../src/context/ToastContext';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
+  const toast = useToast();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -34,12 +36,16 @@ export default function RegisterPage() {
     setErrorMessage(null);
 
     if (password !== confirmPassword) {
-      setErrorMessage('Las contraseñas ingresadas no coinciden.');
+      const msg = 'Las contraseñas ingresadas no coinciden.';
+      setErrorMessage(msg);
+      toast.warning('Validación', msg);
       return;
     }
 
     if (password.length < 6) {
-      setErrorMessage('La contraseña debe contener al menos 6 caracteres.');
+      const msg = 'La contraseña debe contener al menos 6 caracteres.';
+      setErrorMessage(msg);
+      toast.warning('Validación', msg);
       return;
     }
 
@@ -52,9 +58,12 @@ export default function RegisterPage() {
         password,
         phone: phone.trim() || undefined,
       });
+      toast.success('¡Registro Exitoso!', `Bienvenido(a) a la clínica, ${fullName}`);
       router.push('/dashboard');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error al procesar el registro.');
+      const msg = err.message || 'Error al procesar el registro.';
+      setErrorMessage(msg);
+      toast.error('Error de registro', msg);
     } finally {
       setIsSubmitting(false);
     }

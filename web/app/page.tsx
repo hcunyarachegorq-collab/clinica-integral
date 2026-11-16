@@ -22,9 +22,12 @@ import {
   MapPin,
   Sparkles,
   Star,
+  Search,
 } from 'lucide-react';
 import { api, Specialty, Doctor } from '../src/lib/api';
 import { useAuth } from '../src/context/AuthContext';
+import { QuickBookDrawer } from '../src/components/QuickBookDrawer';
+import { DoctorCardSkeleton } from '../src/components/SkeletonCard';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -33,6 +36,9 @@ export default function LandingPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedSpecialty, setSelectedSpecialty] = useState<string | null>(null);
+  const [doctorSearch, setDoctorSearch] = useState<string>('');
+  const [selectedDoctorForBooking, setSelectedDoctorForBooking] = useState<Doctor | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
   useEffect(() => {
     async function loadData() {
@@ -70,9 +76,16 @@ export default function LandingPage() {
     return days[day] || '';
   };
 
-  const filteredDoctors = selectedSpecialty
-    ? doctors.filter((doc) => doc.specialty?.id === selectedSpecialty)
-    : doctors;
+  const filteredDoctors = doctors.filter((doc) => {
+    const matchesSpec = !selectedSpecialty || doc.specialty?.id === selectedSpecialty;
+    const query = doctorSearch.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      doc.fullName.toLowerCase().includes(query) ||
+      (doc.specialty?.name && doc.specialty.name.toLowerCase().includes(query)) ||
+      (doc.bio && doc.bio.toLowerCase().includes(query));
+    return matchesSpec && matchesQuery;
+  });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-teal-500 selection:text-white">
@@ -301,15 +314,70 @@ export default function LandingPage() {
             )}
           </div>
 
+          {/* Buscador en tiempo real y Chips de Filtro */}
+          <div className="space-y-4 pt-2">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
+              <input
+                type="text"
+                value={doctorSearch}
+                onChange={(e) => setDoctorSearch(e.target.value)}
+                placeholder="Buscar especialista por nombre o especialidad..."
+                className="w-full bg-slate-900/80 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all shadow-lg"
+              />
+              {doctorSearch && (
+                <button
+                  onClick={() => setDoctorSearch('')}
+                  className="absolute right-3 top-2.5 text-slate-500 hover:text-white text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => setSelectedSpecialty(null)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                  selectedSpecialty === null
+                    ? 'bg-teal-600 text-white shadow-md shadow-teal-900/30'
+                    : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                Todos ({doctors.length})
+              </button>
+              {specialties.map((spec) => {
+                const isSelected = selectedSpecialty === spec.id;
+                return (
+                  <button
+                    key={spec.id}
+                    type="button"
+                    onClick={() => setSelectedSpecialty(isSelected ? null : spec.id)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-teal-600 text-white shadow-md shadow-teal-900/30'
+                        : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                    }`}
+                  >
+                    <span>{spec.name}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800/80 text-teal-300 font-mono">
+                      {spec.doctorsCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {[1, 2].map((n) => (
-                <div key={n} className="h-64 rounded-2xl bg-slate-900/80 animate-pulse border border-slate-800" />
-              ))}
+              <DoctorCardSkeleton />
+              <DoctorCardSkeleton />
             </div>
           ) : filteredDoctors.length === 0 ? (
             <div className="p-12 text-center rounded-2xl bg-slate-900/50 border border-slate-800 text-slate-400">
-              No hay médicos asignados a esta especialidad por el momento.
+              No se encontraron médicos con los filtros aplicados.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -382,13 +450,17 @@ export default function LandingPage() {
                   </div>
 
                   <div className="pt-2">
-                    <Link
-                      href={user ? `/dashboard?doctorId=${doc.id}` : `/login?redirect=/dashboard`}
-                      className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md shadow-teal-950"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDoctorForBooking(doc);
+                        setIsDrawerOpen(true);
+                      }}
+                      className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md shadow-teal-950 hover:scale-[1.01] active:scale-[0.99]"
                     >
                       <Calendar className="h-4 w-4" />
                       <span>Agendar Cita con este Especialista</span>
-                    </Link>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -457,6 +529,17 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* Drawer Deslizante de Reserva Rápida */}
+      <QuickBookDrawer
+        doctor={selectedDoctorForBooking}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onBookingSuccess={() => {
+          setIsDrawerOpen(false);
+          router.push('/dashboard');
+        }}
+      />
     </div>
   );
 }

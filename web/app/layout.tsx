@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '../src/context/AuthContext';
+import { ToastProvider } from '../src/context/ToastContext';
 
 export const metadata: Metadata = {
   title: 'Sistema Clínico Integral | Centro Médico',
@@ -19,7 +20,9 @@ export default function RootLayout({
       </head>
       <body className="antialiased selection:bg-teal-500 selection:text-white bg-slate-950 text-slate-100 min-h-screen">
         <AuthProvider>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>

@@ -48,6 +48,8 @@ import {
   FolderOpen,
   Bell,
   Star,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   api,
@@ -67,11 +69,14 @@ import {
   NotificationItem,
 } from '../../src/lib/api';
 import { useAuth } from '../../src/context/AuthContext';
+import { useToast } from '../../src/context/ToastContext';
+import { SkeletonCard, AppointmentCardSkeleton } from '../../src/components/SkeletonCard';
 
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading: authLoading, logout, updateUser } = useAuth();
+  const toast = useToast();
 
   // Estados principales
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -81,6 +86,28 @@ function DashboardContent() {
   const [analytics, setAnalytics] = useState<AnalyticsSummaryResponse | null>(null);
   const [loadingData, setLoadingData] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Modo de visualización de citas: 'list' (lista detallada) o 'week' (agenda semanal)
+  const [appointmentsViewMode, setAppointmentsViewMode] = useState<'list' | 'week'>('list');
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+
+  // Días de la semana para la Agenda Semanal (Lunes a Domingo)
+  const currentWeekDays = React.useMemo(() => {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 Dom, 1 Lun, 2 Mar...
+    const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMonday + weekOffset * 7);
+    monday.setHours(0, 0, 0, 0);
+
+    const days: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  }, [weekOffset]);
 
   // Pestañas activas: 'appointments', 'records', 'patients', 'blocked_dates', 'analytics', 'admin_management', 'profile'
   const [activeTab, setActiveTab] = useState<'appointments' | 'records' | 'patients' | 'blocked_dates' | 'analytics' | 'admin_management' | 'profile'>('appointments');
@@ -279,6 +306,32 @@ function DashboardContent() {
     }
   }, [user, loadDashboardData, doctors]);
 
+  // Sincronización automática silenciosa cada 15 segundos (sin flicker ni resetear modales abiertos)
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        try {
+          const [appRes, notifRes] = await Promise.all([
+            api.getAppointments().catch(() => null),
+            api.getNotifications().catch(() => null),
+          ]);
+          if (appRes && appRes.appointments) {
+            setAppointments(appRes.appointments);
+          }
+          if (notifRes) {
+            setNotifications(notifRes.notifications || []);
+            setUnreadNotifCount(notifRes.unreadCount || 0);
+          }
+        } catch {
+          // Ignorar silenciosamente fallos puntuales de red
+        }
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [user]);
+
   // Cargar fechas bloqueadas del médico seleccionado
   const loadBlockedDates = useCallback(async (docId: string) => {
     if (!docId) return;
@@ -433,6 +486,7 @@ function DashboardContent() {
       });
 
       setBookSuccess('¡Cita médica agendada exitosamente!');
+      toast.success('¡Cita médica agendada exitosamente!');
       setBookReason('');
       setBookNotes('');
       setBookDate('');
@@ -443,6 +497,7 @@ function DashboardContent() {
       setAppointments(updated.appointments);
     } catch (err: any) {
       setBookError(err.message || 'Error al programar la cita médica.');
+      toast.error(err.message || 'Error al programar la cita médica.');
     } finally {
       setBookSubmitting(false);
     }
@@ -471,9 +526,10 @@ function DashboardContent() {
         prev.map((a) => (a.id === selectedAppForTriage.id ? { ...a, triage: res.triage } : a))
       );
       setSelectedAppForTriage(null);
-      alert('¡Signos vitales de triaje registrados con éxito!');
+      toast.success('¡Signos vitales de triaje registrados con éxito!');
     } catch (err: any) {
       setTriageError(err.message || 'Error al guardar el triaje.');
+      toast.error(err.message || 'Error al guardar el triaje.');
     } finally {
       setTriageSubmitting(false);
     }
@@ -495,9 +551,10 @@ function DashboardContent() {
       const updated = await api.getAppointments();
       setAppointments(updated.appointments);
       setSelectedAppForPayment(null);
-      alert('¡Cobro registrado exitosamente!');
+      toast.success('¡Cobro registrado exitosamente!');
     } catch (err: any) {
       setPayError(err.message || 'Error al procesar el pago.');
+      toast.error(err.message || 'Error al procesar el pago.');
     } finally {
       setPaySubmitting(false);
     }
@@ -529,9 +586,10 @@ function DashboardContent() {
       setRecordDiagnosis('');
       setRecordPrescription('');
       setRecordNotes('');
-      alert('¡Atención médica registrada y cita completada!');
+      toast.success('¡Atención médica registrada y cita completada!');
     } catch (err: any) {
       setRecordError(err.message || 'Error al registrar la consulta.');
+      toast.error(err.message || 'Error al registrar la consulta.');
     } finally {
       setRecordSubmitting(false);
     }
@@ -545,8 +603,9 @@ function DashboardContent() {
       setAppointments((prev) =>
         prev.map((app) => (app.id === appointmentId ? { ...app, status: newStatus } : app))
       );
+      toast.success(`Cita actualizada a ${newStatus}`);
     } catch (err: any) {
-      alert(err.message || 'Error al actualizar estado.');
+      toast.error(err.message || 'Error al actualizar estado.');
     } finally {
       setActionLoading(null);
     }
@@ -564,12 +623,13 @@ function DashboardContent() {
         iconName: newSpecIcon,
       });
       setSpecSuccess(`¡Especialidad "${newSpecName}" creada!`);
+      toast.success(`¡Especialidad "${newSpecName}" creada con éxito!`);
       setNewSpecName('');
       setNewSpecDesc('');
       const specRes = await api.getSpecialties();
       setSpecialties(specRes.specialties);
     } catch (err: any) {
-      alert(err.message || 'Error al crear especialidad.');
+      toast.error(err.message || 'Error al crear especialidad.');
     } finally {
       setSpecSubmitting(false);
     }
@@ -628,8 +688,10 @@ function DashboardContent() {
       });
       updateUser(res.user);
       setProfileSuccess('¡Perfil actualizado con éxito!');
+      toast.success('¡Perfil actualizado con éxito!');
     } catch (err: any) {
       setProfileError(err.message || 'Error al actualizar perfil');
+      toast.error(err.message || 'Error al actualizar perfil');
     } finally {
       setProfileSubmitting(false);
     }
@@ -642,10 +704,12 @@ function DashboardContent() {
     setPassSuccess(null);
     if (newPassword.length < 6) {
       setPassError('La nueva contraseña debe tener al menos 6 caracteres.');
+      toast.warning('La nueva contraseña debe tener al menos 6 caracteres.');
       return;
     }
     if (newPassword !== confirmPassword) {
       setPassError('Las contraseñas no coinciden.');
+      toast.warning('Las contraseñas no coinciden.');
       return;
     }
     setPassSubmitting(true);
@@ -655,11 +719,13 @@ function DashboardContent() {
         newPassword,
       });
       setPassSuccess('¡Contraseña actualizada exitosamente!');
+      toast.success('¡Contraseña actualizada exitosamente!');
       setCurrPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
       setPassError(err.message || 'Error al actualizar contraseña.');
+      toast.error(err.message || 'Error al actualizar contraseña.');
     } finally {
       setPassSubmitting(false);
     }
@@ -670,6 +736,7 @@ function DashboardContent() {
     e.preventDefault();
     if (!selectedDocForBlock || !newBlockDate) {
       setBlockError('Selecciona el médico y la fecha a bloquear.');
+      toast.warning('Selecciona el médico y la fecha a bloquear.');
       return;
     }
     setBlockSubmitting(true);
@@ -681,11 +748,13 @@ function DashboardContent() {
         reason: newBlockReason.trim() || undefined,
       });
       setBlockSuccess(`¡Fecha ${newBlockDate} marcada como no laborable!`);
+      toast.success(`¡Fecha ${newBlockDate} marcada como no laborable!`);
       setNewBlockDate('');
       setNewBlockReason('');
       await loadBlockedDates(selectedDocForBlock);
     } catch (err: any) {
       setBlockError(err.message || 'Error al bloquear fecha.');
+      toast.error(err.message || 'Error al bloquear fecha.');
     } finally {
       setBlockSubmitting(false);
     }
@@ -697,9 +766,10 @@ function DashboardContent() {
     if (!confirm('¿Estás seguro de eliminar este bloqueo de fecha?')) return;
     try {
       await api.deleteBlockedDate(selectedDocForBlock, blockId);
+      toast.success('Bloqueo de fecha eliminado correctamente');
       await loadBlockedDates(selectedDocForBlock);
     } catch (err: any) {
-      alert(err.message || 'Error al eliminar bloqueo');
+      toast.error(err.message || 'Error al eliminar bloqueo');
     }
   };
 
@@ -708,6 +778,7 @@ function DashboardContent() {
     e.preventDefault();
     if (!bookForPatientModal || !adminBookDoctorId || !adminBookDate || !adminBookSlot) {
       setAdminBookError('Completa todos los campos obligatorios.');
+      toast.warning('Completa todos los campos obligatorios.');
       return;
     }
     setAdminBookSubmitting(true);
@@ -720,7 +791,7 @@ function DashboardContent() {
         reason: adminBookReason.trim() || 'Consulta médica programada desde admisión',
         patientId: bookForPatientModal.id,
       });
-      alert(`¡Cita agendada exitosamente para ${bookForPatientModal.fullName}!`);
+      toast.success(`¡Cita agendada exitosamente para ${bookForPatientModal.fullName}!`);
       setBookForPatientModal(null);
       setAdminBookDoctorId('');
       setAdminBookDate('');
@@ -729,6 +800,7 @@ function DashboardContent() {
       loadDashboardData();
     } catch (err: any) {
       setAdminBookError(err.message || 'Error al agendar cita');
+      toast.error(err.message || 'Error al agendar cita');
     } finally {
       setAdminBookSubmitting(false);
     }
@@ -737,7 +809,7 @@ function DashboardContent() {
   // Manejador: Subir Adjunto / Resultado de Laboratorio
   const handleUploadAttachment = async (recordId: string, file: File) => {
     if (file.size > 2 * 1024 * 1024) {
-      alert('El archivo no puede exceder los 2MB.');
+      toast.error('El archivo no puede exceder los 2MB.');
       return;
     }
     setUploadingAttachment(true);
@@ -777,15 +849,17 @@ function DashboardContent() {
         }
 
         setUploadingAttachmentRecordId(null);
-        alert('¡Archivo adjunto guardado correctamente!');
+        toast.success('¡Archivo adjunto guardado correctamente!');
       } catch (err: any) {
         setUploadAttachmentError(err.message || 'Error al guardar el adjunto.');
+        toast.error(err.message || 'Error al guardar el adjunto.');
       } finally {
         setUploadingAttachment(false);
       }
     };
     reader.onerror = () => {
       setUploadAttachmentError('Error al leer el archivo.');
+      toast.error('Error al leer el archivo.');
       setUploadingAttachment(false);
     };
     reader.readAsDataURL(file);
@@ -835,13 +909,14 @@ function DashboardContent() {
         rating: reviewRating,
         comment: reviewComment.trim() || undefined,
       });
-      alert('¡Muchas gracias por calificar la atención médica recibida!');
+      toast.success('¡Muchas gracias por calificar la atención médica recibida!');
       setSelectedAppForReview(null);
       setReviewComment('');
       setReviewRating(5);
       loadDashboardData();
     } catch (err: any) {
       setReviewError(err.message || 'Error al enviar calificación');
+      toast.error(err.message || 'Error al enviar calificación');
     } finally {
       setReviewSubmitting(false);
     }
@@ -1186,7 +1261,7 @@ function DashboardContent() {
       </header>
 
       {/* Contenido Principal */}
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 flex-1 print:hidden">
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-28 md:pb-8 space-y-8 flex-1 print:hidden">
         {/* Banner de Bienvenida y Pestañas */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-900/60 to-slate-900 border border-slate-800 rounded-2xl p-6">
           <div className="space-y-1">
@@ -1494,7 +1569,12 @@ function DashboardContent() {
                     </span>
                   </div>
 
-                  {appointments.length === 0 ? (
+                  {loadingData && appointments.length === 0 ? (
+                    <div className="space-y-4">
+                      <AppointmentCardSkeleton />
+                      <AppointmentCardSkeleton />
+                    </div>
+                  ) : appointments.length === 0 ? (
                     <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800 space-y-2">
                       <Calendar className="h-10 w-10 text-slate-600 mx-auto" />
                       <p className="text-sm text-slate-400">No tienes citas médicas programadas.</p>
@@ -1635,8 +1715,8 @@ function DashboardContent() {
                   </div>
                 </div>
 
-                {/* Filtros */}
-                <div className="flex items-center justify-between flex-wrap gap-4 pb-2 border-b border-slate-800">
+                {/* Filtros y Selector de Vista (Lista / Agenda Semanal) */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800">
                   <div className="flex items-center gap-2 overflow-x-auto">
                     <span className="text-xs font-semibold text-slate-400 mr-2 flex items-center gap-1">
                       <Filter className="h-3.5 w-3.5" /> Filtrar:
@@ -1664,17 +1744,247 @@ function DashboardContent() {
                     ))}
                   </div>
 
-                  <span className="text-xs text-slate-400">
-                    Mostrando {filteredAppointments.length} de {appointments.length} citas
-                  </span>
+                  <div className="flex items-center gap-3 self-end sm:self-auto">
+                    <span className="text-xs text-slate-400 hidden sm:inline">
+                      Mostrando {filteredAppointments.length} de {appointments.length} citas
+                    </span>
+
+                    {/* Toggle Lista | Agenda Semanal */}
+                    <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setAppointmentsViewMode('list')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          appointmentsViewMode === 'list'
+                            ? 'bg-teal-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <ClipboardList className="h-3.5 w-3.5" />
+                        <span>Lista</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAppointmentsViewMode('week')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          appointmentsViewMode === 'week'
+                            ? 'bg-teal-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>Agenda Semanal</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Lista de Citas */}
-                {filteredAppointments.length === 0 ? (
-                  <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800 text-slate-400">
-                    No se encontraron citas con el filtro seleccionado.
+                {/* VISTA 1: AGENDA SEMANAL */}
+                {appointmentsViewMode === 'week' ? (
+                  <div className="space-y-4">
+                    {/* Barra de Navegación de la Semana */}
+                    <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex-wrap gap-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setWeekOffset((prev) => prev - 1)}
+                          className="p-1.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-all border border-slate-700"
+                          title="Semana anterior"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWeekOffset((prev) => prev + 1)}
+                          className="p-1.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-all border border-slate-700"
+                          title="Semana siguiente"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                        <span className="font-bold text-white text-xs sm:text-sm pl-2">
+                          Semana: {currentWeekDays[0].toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – {currentWeekDays[6].toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+
+                      {weekOffset !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setWeekOffset(0)}
+                          className="text-xs font-semibold text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 px-3 py-1.5 rounded-xl transition-all"
+                        >
+                          Ir a Hoy
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Columnas por Día (Lunes a Domingo) */}
+                    <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+                      {currentWeekDays.map((dayDate, idx) => {
+                        const isToday =
+                          new Date().toDateString() === dayDate.toDateString();
+                        const dayName = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][idx];
+
+                        const dayApps = filteredAppointments
+                          .filter((app) => {
+                            const d = new Date(app.scheduledAt);
+                            return (
+                              d.getFullYear() === dayDate.getFullYear() &&
+                              d.getMonth() === dayDate.getMonth() &&
+                              d.getDate() === dayDate.getDate()
+                            );
+                          })
+                          .sort(
+                            (a, b) =>
+                              new Date(a.scheduledAt).getTime() -
+                              new Date(b.scheduledAt).getTime()
+                          );
+
+                        return (
+                          <div
+                            key={dayDate.toISOString()}
+                            className={`rounded-2xl p-3 border flex flex-col min-h-[320px] transition-all ${
+                              isToday
+                                ? 'bg-teal-950/20 border-teal-500/40 shadow-lg shadow-teal-950/20'
+                                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                            }`}
+                          >
+                            {/* Cabecera del Día */}
+                            <div className="pb-2.5 mb-2.5 border-b border-slate-800 flex items-center justify-between">
+                              <div>
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                                  {dayName}
+                                </span>
+                                <span className={`text-sm font-extrabold ${isToday ? 'text-teal-400' : 'text-white'}`}>
+                                  {dayDate.getDate()} {dayDate.toLocaleDateString('es-ES', { month: 'short' })}
+                                </span>
+                              </div>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  dayApps.length > 0
+                                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30 font-mono'
+                                    : 'text-slate-500'
+                                }`}
+                              >
+                                {dayApps.length}
+                              </span>
+                            </div>
+
+                            {/* Citas del Día */}
+                            <div className="space-y-2 flex-1 overflow-y-auto max-h-[500px]">
+                              {dayApps.length === 0 ? (
+                                <div className="h-24 flex items-center justify-center text-[11px] text-slate-600 italic">
+                                  Sin citas
+                                </div>
+                              ) : (
+                                dayApps.map((app) => {
+                                  const timeStr = new Date(app.scheduledAt).toLocaleTimeString('es-ES', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  });
+                                  return (
+                                    <div
+                                      key={app.id}
+                                      className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/90 hover:border-slate-700 transition-all space-y-1.5 shadow-sm text-xs"
+                                    >
+                                      {/* Hora y Estado */}
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-mono text-[10px] font-bold text-teal-300 bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20">
+                                          {timeStr}
+                                        </span>
+                                        <span className="text-[10px]">
+                                          {getStatusBadge(app.status)}
+                                        </span>
+                                      </div>
+
+                                      {/* Paciente y Motivo */}
+                                      <div>
+                                        <p className="font-bold text-white text-xs truncate" title={app.patient.fullName}>
+                                          {app.patient.fullName}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400 truncate" title={app.reason}>
+                                          {app.reason}
+                                        </p>
+                                      </div>
+
+                                      {/* Acciones Rápidas */}
+                                      <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
+                                        {/* Triaje */}
+                                        {app.triage ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedAppForTriage(app)}
+                                            className="w-full text-left py-0.5 px-1.5 rounded text-[10px] bg-teal-500/10 text-teal-300 border border-teal-500/20 flex items-center justify-between hover:bg-teal-500/20 transition-all"
+                                            title="Ver o editar triaje"
+                                          >
+                                            <span className="flex items-center gap-1 font-semibold truncate">
+                                              <Activity className="h-2.5 w-2.5 text-teal-400 flex-shrink-0" />
+                                              PA {app.triage.bloodPressure}
+                                            </span>
+                                            <span className="text-[9px] text-teal-400">Triaje ✓</span>
+                                          </button>
+                                        ) : (
+                                          (app.status === 'PENDING' || app.status === 'CONFIRMED') && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setSelectedAppForTriage(app)}
+                                              className="w-full py-1 px-1.5 rounded text-[10px] font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 flex items-center justify-center gap-1 transition-all"
+                                            >
+                                              <Activity className="h-2.5 w-2.5 text-teal-400" />
+                                              <span>Reg. Triaje</span>
+                                            </button>
+                                          )
+                                        )}
+
+                                        {/* Cobro para Admin */}
+                                        {user.role === 'ADMIN' && app.paymentStatus === 'UNPAID' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedAppForPayment(app);
+                                              setPayAmount((app.doctor.consultationFee ?? 50).toString());
+                                            }}
+                                            className="w-full py-1 px-1.5 rounded text-[10px] font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white flex items-center justify-center gap-1 shadow-sm transition-all"
+                                          >
+                                            <CreditCard className="h-2.5 w-2.5" />
+                                            <span>Cobrar</span>
+                                          </button>
+                                        )}
+
+                                        {/* Atender para Doctor */}
+                                        {user.role === 'DOCTOR' && app.status === 'CONFIRMED' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedAppForRecord(app)}
+                                            className="w-full py-1 px-1.5 rounded text-[10px] font-bold bg-teal-600 hover:bg-teal-500 text-white flex items-center justify-center gap-1 shadow-sm transition-all"
+                                          >
+                                            <Stethoscope className="h-2.5 w-2.5" />
+                                            <span>Atender</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : (
+                  /* VISTA 2: LISTA DE CITAS CON DETALLES */
+                  loadingData && filteredAppointments.length === 0 ? (
+                    <div className="space-y-4">
+                      <AppointmentCardSkeleton />
+                      <AppointmentCardSkeleton />
+                      <AppointmentCardSkeleton />
+                    </div>
+                  ) : filteredAppointments.length === 0 ? (
+                    <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800 text-slate-400">
+                      No se encontraron citas con el filtro seleccionado.
+                    </div>
+                  ) : (
                   <div className="space-y-4">
                     {filteredAppointments.map((app) => {
                       const date = new Date(app.scheduledAt);
@@ -1841,11 +2151,12 @@ function DashboardContent() {
                       );
                     })}
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                )
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
         {/* ============================================================== */}
         {/* PESTAÑA 2: HISTORIAL CLÍNICO                                   */}
@@ -2479,7 +2790,7 @@ function DashboardContent() {
                             const hist = await api.getPatientHistory(p.id);
                             setSelectedPatientHistoryModal(hist);
                           } catch (err: any) {
-                            alert(err.message || 'Error al obtener historial');
+                            toast.error(err.message || 'Error al obtener historial');
                           } finally {
                             setLoadingPatientHistoryModal(false);
                           }
@@ -3769,9 +4080,114 @@ function DashboardContent() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-slate-800 py-6 text-center text-xs text-slate-500 print:hidden">
+      <footer className="border-t border-slate-800 py-6 text-center text-xs text-slate-500 print:hidden mb-16 md:mb-0">
         Sistema Clínico Integral • Sesión activa como {user.fullName} ({user.role})
       </footer>
+
+      {/* Barra de Navegación Inferior Móvil (md:hidden) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/80 px-2 py-2 flex items-center justify-around shadow-2xl print:hidden">
+        {/* Botón Citas */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('appointments')}
+          className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all duration-200 ${
+            activeTab === 'appointments'
+              ? 'text-teal-400 font-bold scale-105'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <div className={`p-1 rounded-lg ${activeTab === 'appointments' ? 'bg-teal-500/10' : ''}`}>
+            <Calendar className="h-4 w-4" />
+          </div>
+          <span className="text-[10px] leading-none">Citas</span>
+        </button>
+
+        {/* Botón Historial / Recetas */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('records')}
+          className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all duration-200 ${
+            activeTab === 'records'
+              ? 'text-teal-400 font-bold scale-105'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <div className={`p-1 rounded-lg ${activeTab === 'records' ? 'bg-teal-500/10' : ''}`}>
+            <ClipboardList className="h-4 w-4" />
+          </div>
+          <span className="text-[10px] leading-none">Historial</span>
+        </button>
+
+        {/* Botón Pacientes (ADMIN, DOCTOR, RECEPTIONIST) */}
+        {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('patients')}
+            className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all duration-200 ${
+              activeTab === 'patients'
+                ? 'text-teal-400 font-bold scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className={`p-1 rounded-lg ${activeTab === 'patients' ? 'bg-teal-500/10' : ''}`}>
+              <Users className="h-4 w-4" />
+            </div>
+            <span className="text-[10px] leading-none">Pacientes</span>
+          </button>
+        )}
+
+        {/* Botón Fechas Bloqueadas (DOCTOR, ADMIN) */}
+        {(user.role === 'DOCTOR' || user.role === 'ADMIN') && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('blocked_dates')}
+            className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all duration-200 ${
+              activeTab === 'blocked_dates'
+                ? 'text-amber-400 font-bold scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className={`p-1 rounded-lg ${activeTab === 'blocked_dates' ? 'bg-amber-500/10' : ''}`}>
+              <CalendarOff className="h-4 w-4" />
+            </div>
+            <span className="text-[10px] leading-none">Bloqueos</span>
+          </button>
+        )}
+
+        {/* Botón Analítica (Solo ADMIN) */}
+        {user.role === 'ADMIN' && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('analytics')}
+            className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all duration-200 ${
+              activeTab === 'analytics'
+                ? 'text-teal-400 font-bold scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className={`p-1 rounded-lg ${activeTab === 'analytics' ? 'bg-teal-500/10' : ''}`}>
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <span className="text-[10px] leading-none">Analítica</span>
+          </button>
+        )}
+
+        {/* Botón Mi Perfil */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('profile')}
+          className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all duration-200 ${
+            activeTab === 'profile'
+              ? 'text-teal-400 font-bold scale-105'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <div className={`p-1 rounded-lg ${activeTab === 'profile' ? 'bg-teal-500/10' : ''}`}>
+            <UserCheck className="h-4 w-4" />
+          </div>
+          <span className="text-[10px] leading-none">Perfil</span>
+        </button>
+      </nav>
     </div>
   );
 }
