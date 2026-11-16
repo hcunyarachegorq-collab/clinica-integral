@@ -1,0 +1,52 @@
+# ==============================================================================
+# ETAPA 1: Dependencias
+# ==============================================================================
+FROM node:20-alpine AS deps
+
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+# ==============================================================================
+# ETAPA 2: Compilación de Next.js
+# ==============================================================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Variable inyectada en tiempo de compilación para llamadas del cliente navegador
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm run build
+
+# ==============================================================================
+# ETAPA 3: Imagen de Producción (Runner no-root)
+# ==============================================================================
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Crear usuario y grupo seguro sin privilegios de root
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+COPY package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["npm", "run", "start"]

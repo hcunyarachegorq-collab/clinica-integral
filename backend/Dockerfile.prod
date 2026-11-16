@@ -1,0 +1,64 @@
+# ==============================================================================
+# ETAPA 1: Construcción y Compilación TypeScript
+# ==============================================================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Dependencias requeridas por Prisma en Alpine Linux
+RUN apk add --no-cache openssl libc6-compat
+
+# Copiar manifiestos de dependencias y esquema Prisma
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Instalación limpia de todas las dependencias
+RUN npm ci
+
+# Generar cliente tipado de Prisma
+RUN npx prisma generate
+
+# Copiar código fuente y compilar TypeScript
+COPY . .
+RUN npm run build
+
+# ==============================================================================
+# ETAPA 2: Imagen de Ejecución en Producción (Optimizada y Segura)
+# ==============================================================================
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Dependencias del sistema mínimas para el runtime de Prisma
+RUN apk add --no-cache openssl libc6-compat
+
+ENV NODE_ENV=production
+ENV PORT=4000
+
+# Usuario sin privilegios por seguridad
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 expressjs
+
+# Copiar manifiestos y esquema
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Instalar solo dependencias de producción (incluye prisma runtime y @prisma/client)
+RUN npm ci --omit=dev
+
+# Generar cliente Prisma para producción
+RUN npx prisma generate
+
+# Copiar binarios compilados de la etapa builder
+COPY --from=builder /app/dist ./dist
+
+# Copiar y dar permisos al script de entrada
+COPY docker-entrypoint.prod.sh ./
+RUN chmod +x docker-entrypoint.prod.sh && \
+    chown -R expressjs:nodejs /app
+
+USER expressjs
+
+EXPOSE 4000
+
+ENTRYPOINT ["./docker-entrypoint.prod.sh"]

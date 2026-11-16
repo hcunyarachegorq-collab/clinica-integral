@@ -1,0 +1,95 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: clinica_prod_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clinica_prod_user}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD requerida en .env.prod}"
+      POSTGRES_DB: ${POSTGRES_DB:-clinica_prod_db}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clinica_prod_user} -d ${POSTGRES_DB:-clinica_prod_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clinica_prod_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: clinica_prod_backend
+    restart: always
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://${DOMAIN:-localhost}}
+      JWT_SECRET: "${JWT_SECRET:?Error: JWT_SECRET requerida en .env.prod}"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clinica_prod_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-clinica_prod_db}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - clinica_prod_net
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+    container_name: clinica_prod_web
+    restart: always
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+      INTERNAL_API_URL: http://backend:4000
+    depends_on:
+      - backend
+    networks:
+      - clinica_prod_net
+
+  nginx:
+    image: nginx:alpine
+    container_name: clinica_prod_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    depends_on:
+      - web
+      - backend
+    networks:
+      - clinica_prod_net
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: clinica_prod_certbot
+    restart: unless-stopped
+    volumes:
+      - certbot_www:/var/www/certbot:rw
+      - certbot_conf:/etc/letsencrypt:rw
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - clinica_prod_net
+
+volumes:
+  pgdata_prod:
+    name: clinica_prod_pgdata
+  certbot_www:
+    name: clinica_prod_certbot_www
+  certbot_conf:
+    name: clinica_prod_certbot_conf
+
+networks:
+  clinica_prod_net:
+    name: clinica_prod_net
+    driver: bridge
