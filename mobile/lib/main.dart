@@ -3,12 +3,14 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 
+import 'core/api_config.dart';
 import 'core/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'screens/splash_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await ApiConfig.init();
   await initializeDateFormatting('es', null);
 
   runApp(const ClinicaApp());
