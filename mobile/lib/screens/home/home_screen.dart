@@ -111,32 +111,48 @@ class _HomeScreenState extends State<HomeScreen> {
 
   IconData _getSpecialtyIcon(String? iconName, [String? specialtyName]) {
     final key = '${iconName ?? ""} ${specialtyName ?? ""}'.toLowerCase();
-    if (key.contains('heart') || key.contains('cardio')) {
+    if (key.contains('heart-pulse') || key.contains('cardio')) {
       return Icons.favorite_rounded;
-    } else if (key.contains('brain') ||
-        key.contains('neuro') ||
-        key.contains('psico')) {
-      return Icons.psychology_rounded;
+    } else if (key.contains('stethoscope') || key.contains('general')) {
+      return Icons.medical_services_rounded;
     } else if (key.contains('baby') || key.contains('pedia')) {
       return Icons.child_care_rounded;
+    } else if (key.contains('sparkles') ||
+        key.contains('derma') ||
+        key.contains('piel')) {
+      return Icons.auto_awesome_rounded;
+    } else if (key.contains('gyn') ||
+        key.contains('gineco') ||
+        key.contains('obste')) {
+      return Icons.pregnant_woman_rounded;
     } else if (key.contains('bone') ||
         key.contains('trauma') ||
         key.contains('orto')) {
       return Icons.accessibility_new_rounded;
-    } else if (key.contains('eye') || key.contains('oftalmo')) {
+    } else if (key.contains('brain') ||
+        key.contains('neuro') ||
+        key.contains('cerebro')) {
+      return Icons.psychology_rounded;
+    } else if (key.contains('eye') ||
+        key.contains('oftalmo') ||
+        key.contains('ojo')) {
       return Icons.visibility_rounded;
-    } else if (key.contains('skin') || key.contains('derma')) {
-      return Icons.spa_rounded;
-    } else if (key.contains('steth') ||
-        key.contains('general') ||
-        key.contains('medicina')) {
-      return Icons.medical_services_rounded;
-    } else if (key.contains('tooth') ||
-        key.contains('dental') ||
-        key.contains('odonto')) {
-      return Icons.masks_rounded;
-    } else if (key.contains('gyn') || key.contains('gineco')) {
-      return Icons.pregnant_woman_rounded;
+    } else if (key.contains('smile') ||
+        key.contains('odonto') ||
+        key.contains('dental')) {
+      return Icons.sentiment_very_satisfied_rounded;
+    } else if (key.contains('activity') ||
+        key.contains('gastro') ||
+        key.contains('digest')) {
+      return Icons.healing_rounded;
+    } else if (key.contains('shield') ||
+        key.contains('endocri') ||
+        key.contains('tiroide')) {
+      return Icons.shield_rounded;
+    } else if (key.contains('ear') ||
+        key.contains('otorrino') ||
+        key.contains('oido')) {
+      return Icons.hearing_rounded;
     }
     return Icons.health_and_safety_rounded;
   }

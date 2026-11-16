@@ -7,6 +7,63 @@ import { authenticateJwt, authorizeRoles, AuthRequest } from '../middlewares/aut
 
 const router = Router();
 
+// Función utilitaria para formatear el resumen legible de horarios de un médico
+export function formatScheduleLabel(
+  schedules: { dayOfWeek: number; startTime: string; endTime: string }[]
+): string {
+  if (!schedules || schedules.length === 0) return 'Horario por coordinar';
+
+  const dayNamesShort: Record<number, string> = {
+    0: 'Dom',
+    1: 'Lun',
+    2: 'Mar',
+    3: 'Mié',
+    4: 'Jue',
+    5: 'Vie',
+    6: 'Sáb',
+  };
+
+  const timeMap = new Map<string, number[]>();
+  for (const s of schedules) {
+    const timeKey = `${s.startTime} - ${s.endTime}`;
+    if (!timeMap.has(timeKey)) {
+      timeMap.set(timeKey, []);
+    }
+    const days = timeMap.get(timeKey)!;
+    if (!days.includes(s.dayOfWeek)) {
+      days.push(s.dayOfWeek);
+    }
+  }
+
+  const isConsecutive = (arr: number[]): boolean => {
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i] !== arr[i - 1] + 1) return false;
+    }
+    return true;
+  };
+
+  const parts: string[] = [];
+
+  for (const [timeKey, days] of timeMap.entries()) {
+    days.sort((a, b) => a - b);
+    let dayStr = '';
+    if (days.length === 5 && days.every((d, i) => d === i + 1)) {
+      dayStr = 'Lun - Vie';
+    } else if (days.length === 6 && days.every((d, i) => d === i + 1)) {
+      dayStr = 'Lun - Sáb';
+    } else if (days.length === 7) {
+      dayStr = 'Todos los días';
+    } else if (days.length > 2 && isConsecutive(days)) {
+      dayStr = `${dayNamesShort[days[0]]} - ${dayNamesShort[days[days.length - 1]]}`;
+    } else {
+      dayStr = days.map((d) => dayNamesShort[d]).join(', ');
+    }
+    parts.push(`${dayStr} • ${timeKey}`);
+  }
+
+  return parts.join(' | ');
+}
+
 // Esquema Zod para creación de Doctor (Solo Admin)
 const createDoctorSchema = z.object({
   fullName: z.string().min(2, 'El nombre completo debe tener al menos 2 caracteres'),
@@ -107,6 +164,7 @@ router.get('/', async (req: Request, res: Response) => {
           consultationFee: Number(doc.consultationFee),
           averageRating,
           reviewCount,
+          scheduleLabel: formatScheduleLabel(doc.schedules),
           recentReviews: doc.reviews.slice(0, 5).map((r) => ({
             id: r.id,
             patientName: r.patient.fullName,
@@ -174,11 +232,13 @@ router.get('/:id/available-slots', async (req: Request, res: Response) => {
         dayOfWeek: bDayOfWeek,
         available: false,
         blocked: true,
+        nonWorkingDay: false,
         reason: blockedRecord.reason || 'Fecha no disponible / bloqueada por el médico.',
         doctor: {
           id: doctor.id,
           fullName: doctor.user.fullName,
         },
+        scheduleLabel: formatScheduleLabel(doctor.schedules),
         workingDays: doctor.schedules.map((s) => s.dayOfWeek),
         slots: [],
         allSlots: [],
@@ -200,7 +260,9 @@ router.get('/:id/available-slots', async (req: Request, res: Response) => {
         date,
         dayOfWeek,
         available: false,
-        message: 'El médico no atiende consultas en este día de la semana.',
+        nonWorkingDay: true,
+        message: 'El especialista no atiende este día de la semana',
+        scheduleLabel: formatScheduleLabel(doctor.schedules),
         workingDays,
         slots: [],
       });
@@ -255,6 +317,7 @@ router.get('/:id/available-slots', async (req: Request, res: Response) => {
       date,
       dayOfWeek,
       available: true,
+      nonWorkingDay: false,
       doctor: {
         id: doctor.id,
         fullName: doctor.user.fullName,
@@ -264,6 +327,7 @@ router.get('/:id/available-slots', async (req: Request, res: Response) => {
         endTime: schedule.endTime,
         slotDurationMinutes: duration,
       },
+      scheduleLabel: formatScheduleLabel(doctor.schedules),
       workingDays,
       slots: availableSlots,
       allSlots,

@@ -202,6 +202,12 @@ export function QuickBookDrawer({
               </div>
               <h3 className="font-bold text-base text-white mt-1">{doctor.fullName}</h3>
               <p className="text-xs text-slate-400">CMP: {doctor.licenseNumber}</p>
+              {doctor.scheduleLabel && (
+                <div className="flex items-center gap-1.5 mt-1 text-[11px] text-teal-300 font-medium">
+                  <Clock className="h-3 w-3 text-teal-400" />
+                  <span>{doctor.scheduleLabel}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -257,12 +263,27 @@ export function QuickBookDrawer({
               <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 space-y-1">
                 <div className="flex items-center gap-2 font-bold text-amber-300">
                   <CalendarOff className="h-4 w-4 text-amber-400" />
-                  <span>Día No Laborable</span>
+                  <span>Fecha Bloqueada por el Especialista</span>
                 </div>
-                <p>El especialista no atenderá en la fecha seleccionada.</p>
+                <p>El médico no atenderá consultas en esta fecha específica.</p>
                 {slotsData.reason && (
                   <p className="text-[11px] text-amber-300/80 italic">Motivo: &ldquo;{slotsData.reason}&rdquo;</p>
                 )}
+              </div>
+            ) : slotsData?.nonWorkingDay ? (
+              <div className="p-4 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs text-sky-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-sky-300">
+                  <Clock className="h-4 w-4 text-sky-400" />
+                  <span>Día No Laborable para este Especialista</span>
+                </div>
+                <p>{slotsData.message || 'El especialista no atiende este día de la semana.'}</p>
+                {(slotsData.scheduleLabel || doctor.scheduleLabel) && (
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-sky-500/20 text-[11px] text-sky-300">
+                    <span className="font-semibold text-white">Horario habitual de atención: </span>
+                    {slotsData.scheduleLabel || doctor.scheduleLabel}
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-400">Por favor, selecciona una fecha correspondiente a sus días de atención.</p>
               </div>
             ) : slotsData?.slots && slotsData.slots.length > 0 ? (
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -285,8 +306,9 @@ export function QuickBookDrawer({
                 })}
               </div>
             ) : (
-              <div className="p-4 text-center rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
-                No hay turnos disponibles para este día según el horario regular del médico.
+              <div className="p-4 text-center rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 space-y-1">
+                <p className="font-semibold text-slate-300">Turnos Agotados</p>
+                <p>Todos los turnos para esta fecha ya han sido reservados. Por favor, selecciona otra fecha.</p>
               </div>
             )}
           </div>

@@ -25,6 +25,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   bool _isSubmitting = false;
   bool _isBlocked = false;
   String? _blockedReason;
+  bool _isNonWorkingDay = false;
+  String? _nonWorkingDaySchedule;
   List<String> _availableSlots = [];
   String? _slotErrorMessage;
 
@@ -48,6 +50,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       _slotErrorMessage = null;
       _isBlocked = false;
       _blockedReason = null;
+      _isNonWorkingDay = false;
+      _nonWorkingDaySchedule = null;
       _availableSlots = [];
     });
 
@@ -69,16 +73,23 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
 
         final isAvailable = response['available'] as bool? ?? true;
         final isBlocked = response['blocked'] as bool? ?? false;
+        final isNonWorkingDay = response['nonWorkingDay'] as bool? ?? false;
         final blockedReason = response['reason'] as String?;
         final msg = response['message'] as String?;
+        final scheduleLabel = response['scheduleLabel'] as String?;
 
         if (mounted) {
           setState(() {
             _availableSlots = slots;
             _isBlocked = isBlocked;
             _blockedReason = blockedReason;
+            _isNonWorkingDay = isNonWorkingDay;
+            _nonWorkingDaySchedule =
+                scheduleLabel ?? widget.doctor.scheduleLabel;
 
             if (isBlocked) {
+              _slotErrorMessage = null;
+            } else if (isNonWorkingDay) {
               _slotErrorMessage = null;
             } else if (!isAvailable && msg != null) {
               _slotErrorMessage = msg;
@@ -326,6 +337,28 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                                 color: AppTheme.textSecondary,
                               ),
                             ),
+                            if (widget.doctor.workingDaysSummary.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(Icons.schedule_rounded,
+                                      size: 12, color: AppTheme.primary),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      widget.doctor.workingDaysSummary,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -478,6 +511,84 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                               ],
                             ),
                           )
+                        : _isNonWorkingDay
+                            ? Container(
+                                key: const ValueKey('non_working_slots'),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF0F9FF),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border:
+                                      Border.all(color: const Color(0xFFBAE6FD)),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(
+                                      Icons.schedule_rounded,
+                                      color: Color(0xFF0284C7),
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Día No Laborable para este Especialista',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0369A1),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'El especialista no atiende consultas en el día de la semana seleccionado.',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF0284C7),
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                          if (_nonWorkingDaySchedule != null) ...[
+                                            const SizedBox(height: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                border: Border.all(
+                                                    color: const Color(0xFFE0F2FE)),
+                                              ),
+                                              child: Text(
+                                                'Horario habitual: $_nonWorkingDaySchedule',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF0369A1),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                          const SizedBox(height: 6),
+                                          const Text(
+                                            'Por favor selecciona una fecha correspondiente a sus días de atención.',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF075985),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
                         : _slotErrorMessage != null
                             ? Container(
                                 key: const ValueKey('error_slots'),

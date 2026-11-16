@@ -30,6 +30,12 @@ import {
   TrendingUp,
   Download,
   Award,
+  Heart,
+  Bone,
+  Brain,
+  Eye,
+  Smile,
+  Ear,
 } from 'lucide-react';
 import { api, Specialty, Doctor } from '../src/lib/api';
 import { useAuth } from '../src/context/AuthContext';
@@ -73,6 +79,24 @@ export default function LandingPage() {
         return <HeartPulse className="h-6 w-6 text-rose-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
       case 'baby':
         return <Baby className="h-6 w-6 text-amber-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'sparkles':
+        return <Sparkles className="h-6 w-6 text-fuchsia-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'heart':
+        return <Heart className="h-6 w-6 text-pink-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'bone':
+        return <Bone className="h-6 w-6 text-indigo-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'brain':
+        return <Brain className="h-6 w-6 text-purple-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'eye':
+        return <Eye className="h-6 w-6 text-blue-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'smile':
+        return <Smile className="h-6 w-6 text-emerald-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'activity':
+        return <Activity className="h-6 w-6 text-orange-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'shield':
+        return <ShieldCheck className="h-6 w-6 text-yellow-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
+      case 'ear':
+        return <Ear className="h-6 w-6 text-cyan-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
       default:
         return <Activity className="h-6 w-6 text-cyan-400 group-hover:scale-110 group-hover:rotate-6 transition-transform" />;
     }
@@ -702,12 +726,13 @@ export default function LandingPage() {
                         <Clock className="h-3.5 w-3.5 text-teal-400" />
                         <span className="font-semibold">Horario de Atención:</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 pl-5">
-                        {doc.schedules && doc.schedules.length > 0
-                          ? doc.schedules
-                              .map((s) => `${getDayName(s.dayOfWeek)} (${s.startTime} - ${s.endTime})`)
-                              .join(' • ')
-                          : 'Horario regular de consulta médica'}
+                      <p className="text-[11px] text-teal-300/90 pl-5 font-medium">
+                        {doc.scheduleLabel ||
+                          (doc.schedules && doc.schedules.length > 0
+                            ? doc.schedules
+                                .map((s) => `${getDayName(s.dayOfWeek)} (${s.startTime} - ${s.endTime})`)
+                                .join(' • ')
+                            : 'Horario regular de atención')}
                       </p>
                     </div>
 

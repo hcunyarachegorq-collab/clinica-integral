@@ -402,21 +402,23 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: const Color(0xFFF0FDFA),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.border),
+                border: Border.all(
+                    color: AppTheme.primary.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_today_rounded,
-                      size: 14, color: AppTheme.textSecondary),
+                  const Icon(Icons.schedule_rounded,
+                      size: 14, color: AppTheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Días de atención: ${doctor.workingDaysSummary}',
+                      doctor.workingDaysSummary,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primary,
                       ),
                     ),
                   ),

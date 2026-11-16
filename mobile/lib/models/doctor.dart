@@ -54,6 +54,7 @@ class Doctor {
   final double consultationFee;
   final Specialty? specialty;
   final List<DoctorSchedule> schedules;
+  final String? scheduleLabel;
   final double averageRating;
   final int reviewCount;
 
@@ -68,6 +69,7 @@ class Doctor {
     required this.consultationFee,
     this.specialty,
     this.schedules = const [],
+    this.scheduleLabel,
     this.averageRating = 0.0,
     this.reviewCount = 0,
   });
@@ -118,6 +120,7 @@ class Doctor {
       consultationFee: (json['consultationFee'] as num?)?.toDouble() ?? 0.0,
       specialty: specialty,
       schedules: schedulesList,
+      scheduleLabel: json['scheduleLabel'] as String?,
       averageRating: averageRating,
       reviewCount: reviewCount,
     );
@@ -133,6 +136,9 @@ class Doctor {
   }
 
   String get workingDaysSummary {
+    if (scheduleLabel != null && scheduleLabel!.isNotEmpty) {
+      return scheduleLabel!;
+    }
     if (schedules.isEmpty) return 'Consultar disponibilidad';
     final days = schedules.map((s) => s.dayName.substring(0, 3)).toSet().toList();
     return days.join(', ');

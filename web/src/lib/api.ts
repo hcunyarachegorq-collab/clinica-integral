@@ -63,6 +63,7 @@ export interface Doctor {
   reviewCount?: number;
   recentReviews?: DoctorRecentReview[];
   schedules: DoctorSchedule[];
+  scheduleLabel?: string;
 }
 
 export interface Triage {
@@ -182,8 +183,10 @@ export interface AvailableSlotsResponse {
   dayOfWeek: number;
   available: boolean;
   blocked?: boolean;
+  nonWorkingDay?: boolean;
   reason?: string;
   message?: string;
+  scheduleLabel?: string;
   schedule?: {
     startTime: string;
     endTime: string;
