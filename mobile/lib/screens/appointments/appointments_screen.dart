@@ -1,0 +1,467 @@
+import 'package:flutter/material.dart';
+import '../../core/api_client.dart';
+import '../../core/app_theme.dart';
+import '../../models/appointment.dart';
+
+class AppointmentsScreen extends StatefulWidget {
+  const AppointmentsScreen({super.key});
+
+  @override
+  State<AppointmentsScreen> createState() => _AppointmentsScreenState();
+}
+
+class _AppointmentsScreenState extends State<AppointmentsScreen> {
+  final ApiClient _apiClient = ApiClient();
+  bool _isLoading = true;
+  List<Appointment> _allAppointments = [];
+  List<Appointment> _filteredAppointments = [];
+  String _selectedFilter = 'ALL'; // ALL, PENDING, CONFIRMED, COMPLETED, CANCELLED
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppointments();
+  }
+
+  Future<void> _loadAppointments() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await _apiClient.get('/api/appointments');
+      final list = <Appointment>[];
+
+      if (response is Map<String, dynamic> &&
+          response['appointments'] is List) {
+        for (final item in response['appointments']) {
+          list.add(Appointment.fromJson(item as Map<String, dynamic>));
+        }
+      }
+
+      // Ordenar por fecha programada descendente (más recientes primero)
+      list.sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
+
+      if (mounted) {
+        setState(() {
+          _allAppointments = list;
+          _isLoading = false;
+        });
+        _applyFilter();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _applyFilter() {
+    setState(() {
+      if (_selectedFilter == 'ALL') {
+        _filteredAppointments = _allAppointments;
+      } else {
+        _filteredAppointments = _allAppointments
+            .where((app) => app.status == _selectedFilter)
+            .toList();
+      }
+    });
+  }
+
+  Future<void> _cancelAppointment(Appointment app) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text('¿Cancelar esta cita médica?'),
+        content: Text(
+          'Se cancelará tu cita del día ${app.formattedDate} a las ${app.formattedTime} con el Dr. ${app.doctorFullName}. Esta acción liberará el horario.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('No, mantener'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Sí, Cancelar Cita'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await _apiClient.patch('/api/appointments/${app.id}/status', body: {
+        'status': 'CANCELLED',
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('La cita ha sido cancelada exitosamente.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _loadAppointments();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      appBar: AppBar(
+        title: const Text('Mis Citas Médicas'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadAppointments,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Selector de Estados (Filtros)
+          Container(
+            color: Colors.white,
+            height: 52,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              children: [
+                _buildFilterChip('Todas', 'ALL'),
+                _buildFilterChip('Pendientes', 'PENDING'),
+                _buildFilterChip('Confirmadas', 'CONFIRMED'),
+                _buildFilterChip('Completadas', 'COMPLETED'),
+                _buildFilterChip('Canceladas', 'CANCELLED'),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppTheme.border),
+
+          // Contenido Principal
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline_rounded,
+                                size: 48, color: AppTheme.error),
+                            const SizedBox(height: 12),
+                            Text('Error: $_errorMessage'),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: _loadAppointments,
+                              child: const Text('Reintentar'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _filteredAppointments.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.event_busy_rounded,
+                                  size: 52,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'No tienes citas en esta categoría',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Tus citas programadas aparecerán aquí.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadAppointments,
+                            child: ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _filteredAppointments.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(height: 14),
+                              itemBuilder: (context, index) {
+                                final app = _filteredAppointments[index];
+                                return _buildAppointmentCard(app);
+                              },
+                            ),
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, String value) {
+    final isSelected = _selectedFilter == value;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (selected) {
+          if (selected) {
+            setState(() {
+              _selectedFilter = value;
+            });
+            _applyFilter();
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildAppointmentCard(Appointment app) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cabecera: Fecha / Hora (fila superior con Expanded)
+            Row(
+              children: [
+                const Icon(Icons.event_rounded,
+                    size: 16, color: AppTheme.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    app.formattedDateTime,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Badges de estado con Wrap para auto-ajuste responsivo sin desbordamiento
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Badge Estado Cita
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: app.statusBackgroundColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    app.statusLabel,
+                    style: TextStyle(
+                      color: app.statusColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                // Badge Estado Pago
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: app.isPaid
+                        ? const Color(0xFFD1FAE5)
+                        : const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    app.isPaid ? 'PAGADO' : 'PENDIENTE',
+                    style: TextStyle(
+                      color: app.isPaid
+                          ? const Color(0xFF047857)
+                          : const Color(0xFFB45309),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 20, color: AppTheme.border),
+
+            // Info del Doctor
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppTheme.primaryLight,
+                  child: const Icon(Icons.person_rounded,
+                      color: AppTheme.primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        app.doctorFullName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        app.doctorSpecialty,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.secondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'S/ ${app.consultationFee.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Motivo
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Motivo de Consulta:',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    app.reason,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Triaje si existe
+            if (app.triage != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.monitor_heart_rounded,
+                        color: Color(0xFF16A34A), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Triaje: PA ${app.triage!.bloodPressure} • ${app.triage!.heartRate} lpm • ${app.triage!.temperature}°C • IMC ${app.triage!.bmi.toStringAsFixed(1)} (${app.triage!.bmiCategory})',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF15803D),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Botón Cancelar si está activa
+            if (app.canBeCancelled) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _cancelAppointment(app),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.error,
+                    side: const BorderSide(color: Color(0xFFFCA5A5)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  icon: const Icon(Icons.cancel_outlined, size: 16),
+                  label: const Text('Cancelar Cita'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}

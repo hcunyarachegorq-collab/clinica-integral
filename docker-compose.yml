@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: clinica_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clinica_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clinica_secure_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-clinica_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - clinica-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clinica_admin} -d ${POSTGRES_DB:-clinica_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clinica_backend
+    restart: unless-stopped
+    environment:
+      PORT: ${BACKEND_PORT:-4000}
+      NODE_ENV: ${NODE_ENV:-development}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-clinica_jwt_secret_key_2026_super_secure}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clinica_admin}:${POSTGRES_PASSWORD:-clinica_secure_pass_2026}@db:5432/${POSTGRES_DB:-clinica_db}?schema=public
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - clinica-net
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: clinica_web
+    restart: unless-stopped
+    environment:
+      PORT: ${WEB_PORT:-3000}
+      NODE_ENV: ${NODE_ENV:-development}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      INTERNAL_API_URL: http://backend:4000
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - clinica-net
+
+volumes:
+  postgres_data:
+    name: clinica_postgres_data
+
+networks:
+  clinica-net:
+    name: clinica-net
+    driver: bridge
