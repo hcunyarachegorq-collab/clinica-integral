@@ -758,6 +758,61 @@ async function main() {
   }
 
   console.log(`[Seed] ¡Éxito! ${countCreated} médicos creados/sincronizados con sus horarios y reseñas.`);
+
+  // 7. Catálogo de Botica Interna (25 Medicamentos Esenciales)
+  console.log('[Seed] Sembrando catálogo de 25 medicamentos de botica...');
+  const medicationsCatalog = [
+    { code: 'MED-001', name: 'Paracetamol 500mg', presentation: 'Caja x 20 tabletas', category: 'Analgésicos', price: 2.50, stock: 180, minStock: 20 },
+    { code: 'MED-002', name: 'Ibuprofeno 400mg', presentation: 'Caja x 20 tabletas', category: 'Antiinflamatorios', price: 3.50, stock: 150, minStock: 20 },
+    { code: 'MED-003', name: 'Amoxicilina 500mg', presentation: 'Caja x 20 cápsulas', category: 'Antibióticos', price: 8.00, stock: 120, minStock: 15 },
+    { code: 'MED-004', name: 'Azitromicina 500mg', presentation: 'Caja x 3 tabletas', category: 'Antibióticos', price: 18.00, stock: 90, minStock: 15 },
+    { code: 'MED-005', name: 'Ciprofloxacino 500mg', presentation: 'Caja x 10 tabletas', category: 'Antibióticos', price: 15.00, stock: 80, minStock: 10 },
+    { code: 'MED-006', name: 'Losartán 50mg', presentation: 'Caja x 30 tabletas', category: 'Cardiovascular', price: 22.00, stock: 110, minStock: 20 },
+    { code: 'MED-007', name: 'Enalapril 10mg', presentation: 'Caja x 30 tabletas', category: 'Cardiovascular', price: 14.00, stock: 100, minStock: 15 },
+    { code: 'MED-008', name: 'Amlodipino 5mg', presentation: 'Caja x 30 tabletas', category: 'Cardiovascular', price: 18.50, stock: 95, minStock: 15 },
+    { code: 'MED-009', name: 'Atorvastatina 20mg', presentation: 'Caja x 30 tabletas', category: 'Cardiovascular', price: 28.00, stock: 85, minStock: 10 },
+    { code: 'MED-010', name: 'Omeprazol 20mg', presentation: 'Caja x 30 cápsulas', category: 'Gastroprotectores', price: 12.00, stock: 160, minStock: 20 },
+    { code: 'MED-011', name: 'Esomeprazol 40mg', presentation: 'Caja x 14 tabletas', category: 'Gastroprotectores', price: 35.00, stock: 75, minStock: 10 },
+    { code: 'MED-012', name: 'Ranitidina 150mg', presentation: 'Caja x 20 tabletas', category: 'Gastroprotectores', price: 4.00, stock: 90, minStock: 15 },
+    { code: 'MED-013', name: 'Paracetamol Jarabe 120mg/5ml', presentation: 'Frasco x 120ml', category: 'Pediátrico', price: 9.50, stock: 70, minStock: 10 },
+    { code: 'MED-014', name: 'Ibuprofeno Suspensión 100mg/5ml', presentation: 'Frasco x 120ml', category: 'Pediátrico', price: 12.50, stock: 65, minStock: 10 },
+    { code: 'MED-015', name: 'Amoxicilina Suspensión 250mg/5ml', presentation: 'Frasco x 75ml', category: 'Pediátrico', price: 16.00, stock: 60, minStock: 10 },
+    { code: 'MED-016', name: 'Salbutamol Inhalador 100mcg', presentation: 'Frasco x 200 dosis', category: 'Respiratorio', price: 24.00, stock: 55, minStock: 10 },
+    { code: 'MED-017', name: 'Cetirizina 10mg', presentation: 'Caja x 10 tabletas', category: 'Antialérgicos', price: 6.50, stock: 140, minStock: 20 },
+    { code: 'MED-018', name: 'Loratadina 10mg', presentation: 'Caja x 10 tabletas', category: 'Antialérgicos', price: 5.50, stock: 130, minStock: 15 },
+    { code: 'MED-019', name: 'Dexametasona 4mg/2ml', presentation: 'Ampolla inyectable', category: 'Antiinflamatorios', price: 7.00, stock: 80, minStock: 15 },
+    { code: 'MED-020', name: 'Ketorolaco 10mg', presentation: 'Caja x 10 tabletas', category: 'Analgésicos', price: 11.00, stock: 95, minStock: 15 },
+    { code: 'MED-021', name: 'Metformina 850mg', presentation: 'Caja x 30 tabletas', category: 'Endocrinología', price: 19.00, stock: 120, minStock: 20 },
+    { code: 'MED-022', name: 'Levotiroxina 100mcg', presentation: 'Caja x 50 tabletas', category: 'Endocrinología', price: 32.00, stock: 70, minStock: 10 },
+    { code: 'MED-023', name: 'Clotrimazol Crema 1%', presentation: 'Tubo x 20g', category: 'Dermatología', price: 8.50, stock: 85, minStock: 15 },
+    { code: 'MED-024', name: 'Mupirocina Ungüento 2%', presentation: 'Tubo x 15g', category: 'Dermatología', price: 26.00, stock: 50, minStock: 10 },
+    { code: 'MED-025', name: 'Suero Fisiológico 0.9%', presentation: 'Frasco x 1000ml', category: 'Soluciones', price: 13.50, stock: 110, minStock: 20 },
+  ];
+
+  for (const m of medicationsCatalog) {
+    await prisma.medication.upsert({
+      where: { code: m.code },
+      update: {
+        name: m.name,
+        presentation: m.presentation,
+        category: m.category,
+        price: m.price,
+        minStock: m.minStock,
+      },
+      create: {
+        code: m.code,
+        name: m.name,
+        presentation: m.presentation,
+        category: m.category,
+        price: m.price,
+        stock: m.stock,
+        minStock: m.minStock,
+        isActive: true,
+      },
+    });
+  }
+  console.log(`[Seed] ${medicationsCatalog.length} medicamentos de botica creados/actualizados.`);
+
   console.log('--- Seed completado exitosamente ---');
 }
 

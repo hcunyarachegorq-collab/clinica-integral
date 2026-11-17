@@ -6,11 +6,18 @@ import { authenticateJwt, authorizeRoles, AuthRequest } from '../middlewares/aut
 
 const router = Router();
 
+const prescriptionItemInputSchema = z.object({
+  medicationId: z.string().uuid('ID de medicamento inválido'),
+  quantity: z.number().int().positive('La cantidad debe ser mayor a 0'),
+  dosage: z.string().min(2, 'La posología o dosis es requerida'),
+});
+
 const createMedicalRecordSchema = z.object({
   appointmentId: z.string().uuid('ID de cita médica inválido'),
   diagnosis: z.string().min(3, 'El diagnóstico debe tener al menos 3 caracteres'),
   prescription: z.string().min(3, 'La receta / tratamiento debe tener al menos 3 caracteres'),
   notes: z.string().optional(),
+  items: z.array(prescriptionItemInputSchema).optional(),
 });
 
 // POST /api/medical-records (Solo DOCTOR)
@@ -32,7 +39,7 @@ router.post(
         });
       }
 
-      const { appointmentId, diagnosis, prescription, notes } = parseResult.data;
+      const { appointmentId, diagnosis, prescription, notes, items } = parseResult.data;
 
       // Buscar perfil del doctor autenticado
       const doctorProfile = await prisma.doctorProfile.findUnique({
@@ -65,7 +72,49 @@ router.post(
         return res.status(409).json({ error: 'Esta cita ya cuenta con un registro médico registrado.' });
       }
 
-      // Transacción atómica en Prisma: Crear MedicalRecord y cambiar Appointment a COMPLETED
+      // Procesar y congelar precios de medicamentos de botica si se recetaron
+      let pharmacyTotal = 0;
+      const verifiedItems: {
+        medicationId: string;
+        quantity: number;
+        dosage: string;
+        unitPrice: number;
+        subtotal: number;
+      }[] = [];
+
+      if (items && items.length > 0) {
+        for (const item of items) {
+          const med = await prisma.medication.findUnique({
+            where: { id: item.medicationId },
+          });
+
+          if (!med || !med.isActive) {
+            return res.status(400).json({
+              error: `El medicamento seleccionado (${item.medicationId}) no existe o está inactivo en botica.`,
+            });
+          }
+
+          if (med.stock < item.quantity) {
+            return res.status(400).json({
+              error: `Stock insuficiente para "${med.name}". Stock actual disponible: ${med.stock}, solicitado: ${item.quantity}.`,
+            });
+          }
+
+          const subtotal = Number((med.price * item.quantity).toFixed(2));
+          pharmacyTotal += subtotal;
+
+          verifiedItems.push({
+            medicationId: med.id,
+            quantity: item.quantity,
+            dosage: item.dosage,
+            unitPrice: med.price,
+            subtotal,
+          });
+        }
+      }
+      pharmacyTotal = Number(pharmacyTotal.toFixed(2));
+
+      // Transacción atómica en Prisma: Crear MedicalRecord con items y cambiar Appointment a COMPLETED
       const result = await prisma.$transaction(async (tx) => {
         const record = await tx.medicalRecord.create({
           data: {
@@ -75,6 +124,17 @@ router.post(
             diagnosis,
             prescription,
             notes,
+            pharmacyTotal,
+            pharmacyPaid: false,
+            prescriptionItems: {
+              create: verifiedItems.map((v) => ({
+                medicationId: v.medicationId,
+                quantity: v.quantity,
+                dosage: v.dosage,
+                unitPrice: v.unitPrice,
+                subtotal: v.subtotal,
+              })),
+            },
           },
           include: {
             patient: {
@@ -95,6 +155,11 @@ router.post(
               select: {
                 scheduledAt: true,
                 reason: true,
+              },
+            },
+            prescriptionItems: {
+              include: {
+                medication: true,
               },
             },
           },
@@ -130,6 +195,8 @@ router.post(
           diagnosis: result.diagnosis,
           prescription: result.prescription,
           notes: result.notes,
+          pharmacyTotal: result.pharmacyTotal,
+          pharmacyPaid: result.pharmacyPaid,
           createdAt: result.createdAt,
           patient: result.patient,
           doctor: {
@@ -139,6 +206,7 @@ router.post(
             licenseNumber: result.doctor.licenseNumber,
           },
           appointment: result.appointment,
+          prescriptionItems: result.prescriptionItems,
         },
       });
     } catch (error: any) {
@@ -170,7 +238,7 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
       }
       whereClause.doctorId = docProfile.id;
     }
-    // Si es ADMIN, whereClause queda vacío para consultar todos
+    // Si es ADMIN o RECEPTIONIST, whereClause queda vacío para consultar todos
 
     const records = await prisma.medicalRecord.findMany({
       where: whereClause,
@@ -197,6 +265,11 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
           },
         },
         attachments: true,
+        prescriptionItems: {
+          include: {
+            medication: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -211,6 +284,8 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         diagnosis: r.diagnosis,
         prescription: r.prescription,
         notes: r.notes,
+        pharmacyTotal: r.pharmacyTotal,
+        pharmacyPaid: r.pharmacyPaid,
         createdAt: r.createdAt,
         patient: r.patient,
         doctor: {
@@ -221,6 +296,7 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         },
         appointment: r.appointment,
         attachments: r.attachments,
+        prescriptionItems: r.prescriptionItems,
       })),
     });
   } catch (error: any) {
@@ -230,6 +306,102 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
     });
   }
 });
+
+// PATCH /api/medical-records/:id/dispense (Solo ADMIN o RECEPTIONIST: cobro y despacho en botica)
+router.patch(
+  '/:id/dispense',
+  authenticateJwt,
+  authorizeRoles(Role.ADMIN, Role.RECEPTIONIST),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const record = await prisma.medicalRecord.findUnique({
+        where: { id },
+        include: {
+          patient: true,
+          prescriptionItems: {
+            include: { medication: true },
+          },
+        },
+      });
+
+      if (!record) {
+        return res.status(404).json({ error: 'Registro médico no encontrado.' });
+      }
+
+      if (record.pharmacyPaid) {
+        return res.status(400).json({ error: 'Esta receta ya fue cobrada y despachada previamente en botica.' });
+      }
+
+      if (record.prescriptionItems.length === 0) {
+        return res.status(400).json({
+          error: 'Este registro médico no contiene medicamentos de botica para despachar.',
+        });
+      }
+
+      // Validar stock antes de ejecutar
+      for (const item of record.prescriptionItems) {
+        if (item.medication.stock < item.quantity) {
+          return res.status(400).json({
+            error: `Stock insuficiente para despachar "${item.medication.name}". Stock disponible: ${item.medication.stock}, requerido: ${item.quantity}.`,
+          });
+        }
+      }
+
+      // Transacción atómica: descontar stock y marcar como pagado
+      const updatedRecord = await prisma.$transaction(async (tx) => {
+        for (const item of record.prescriptionItems) {
+          await tx.medication.update({
+            where: { id: item.medicationId },
+            data: {
+              stock: {
+                decrement: item.quantity,
+              },
+            },
+          });
+        }
+
+        return tx.medicalRecord.update({
+          where: { id },
+          data: {
+            pharmacyPaid: true,
+          },
+          include: {
+            prescriptionItems: {
+              include: { medication: true },
+            },
+            patient: {
+              select: { id: true, fullName: true, email: true },
+            },
+          },
+        });
+      });
+
+      // Notificación al paciente
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: record.patientId,
+            title: 'Receta Despachada y Pagada en Botica',
+            message: `Tu receta médica (${record.prescriptionItems.length} medicamento(s), Total: S/ ${record.pharmacyTotal.toFixed(2)}) ha sido despachada y pagada en caja exitosamente.`,
+            type: 'MEDICAL_RECORD',
+          },
+        });
+      } catch (_) {}
+
+      return res.status(200).json({
+        message: 'Receta cobrada y despachada exitosamente. Stock actualizado en botica.',
+        medicalRecord: updatedRecord,
+      });
+    } catch (error: any) {
+      console.error('Error al despachar receta:', error);
+      return res.status(500).json({
+        error: 'Error interno del servidor al despachar receta médica.',
+      });
+    }
+  }
+);
 
 // POST /api/medical-records/:id/attachments (DOCTOR y ADMIN)
 const attachmentSchema = z.object({

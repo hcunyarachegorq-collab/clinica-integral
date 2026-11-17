@@ -145,18 +145,21 @@ model Triage {
 }
 
 model MedicalRecord {
-  id            String        @id @default(uuid())
-  appointmentId String        @unique
-  appointment   Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  patientId     String
-  patient       User          @relation("PatientRecords", fields: [patientId], references: [id], onDelete: Cascade)
-  doctorId      String
-  doctor        DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  diagnosis     String
-  prescription  String
-  notes         String?
-  attachments   MedicalAttachment[]
-  createdAt     DateTime      @default(now())
+  id                String              @id @default(uuid())
+  appointmentId     String              @unique
+  appointment       Appointment         @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patientId         String
+  patient           User                @relation("PatientRecords", fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId          String
+  doctor            DoctorProfile       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  diagnosis         String
+  prescription      String
+  notes             String?
+  pharmacyTotal     Float               @default(0)
+  pharmacyPaid      Boolean             @default(false)
+  attachments       MedicalAttachment[]
+  prescriptionItems PrescriptionItem[]
+  createdAt         DateTime            @default(now())
 
   @@map("medical_records")
 }
@@ -211,4 +214,36 @@ model DoctorReview {
   createdAt     DateTime      @default(now())
 
   @@map("doctor_reviews")
+}
+
+model Medication {
+  id                String             @id @default(uuid())
+  code              String             @unique
+  name              String
+  presentation      String
+  category          String
+  price             Float
+  stock             Int
+  minStock          Int                @default(10)
+  isActive          Boolean            @default(true)
+  prescriptionItems PrescriptionItem[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@map("medications")
+}
+
+model PrescriptionItem {
+  id              String        @id @default(uuid())
+  medicalRecordId String
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  medicationId    String
+  medication      Medication    @relation(fields: [medicationId], references: [id])
+  quantity        Int
+  dosage          String
+  unitPrice       Float
+  subtotal        Float
+  createdAt       DateTime      @default(now())
+
+  @@map("prescription_items")
 }

@@ -103,11 +103,36 @@ router.get(
 
       const topDoctors = Object.values(doctorMap).sort((a, b) => b.completedCount - a.completedCount);
 
+      // 7. Métricas de Botica Interna
+      const allMedications = await prisma.medication.findMany({
+        where: { isActive: true },
+        orderBy: { stock: 'asc' },
+      });
+
+      const lowStockMedications = allMedications.filter((m) => m.stock <= m.minStock);
+
+      const paidMedicalRecords = await prisma.medicalRecord.findMany({
+        where: { pharmacyPaid: true },
+        select: { pharmacyTotal: true },
+      });
+
+      const pendingMedicalRecords = await prisma.medicalRecord.findMany({
+        where: { pharmacyPaid: false, pharmacyTotal: { gt: 0 } },
+        select: { pharmacyTotal: true },
+      });
+
+      const pharmacyRevenue = paidMedicalRecords.reduce((acc, r) => acc + (Number(r.pharmacyTotal) || 0), 0);
+      const pendingPharmacyRevenue = pendingMedicalRecords.reduce((acc, r) => acc + (Number(r.pharmacyTotal) || 0), 0);
+
       return res.status(200).json({
         financial: {
-          totalRevenue,
-          pendingRevenue,
-          currency: 'USD',
+          totalRevenue: totalRevenue + pharmacyRevenue,
+          consultationRevenue: totalRevenue,
+          pharmacyRevenue,
+          pendingRevenue: pendingRevenue + pendingPharmacyRevenue,
+          pendingConsultationRevenue: pendingRevenue,
+          pendingPharmacyRevenue,
+          currency: 'PEN',
         },
         appointments: {
           total: totalAppointments,
@@ -122,6 +147,22 @@ router.get(
         },
         bySpecialty,
         topDoctors,
+        pharmacy: {
+          totalMedications: allMedications.length,
+          lowStockCount: lowStockMedications.length,
+          lowStockMedications: lowStockMedications.map((m) => ({
+            id: m.id,
+            code: m.code,
+            name: m.name,
+            presentation: m.presentation,
+            category: m.category,
+            stock: m.stock,
+            minStock: m.minStock,
+            price: m.price,
+          })),
+          totalRevenue: pharmacyRevenue,
+          pendingRevenue: pendingPharmacyRevenue,
+        },
       });
     } catch (error: any) {
       console.error('Error al generar resumen analítico:', error);

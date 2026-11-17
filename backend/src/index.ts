@@ -12,6 +12,7 @@ import medicalRecordRoutes from './routes/medical-record.routes';
 import patientRoutes from './routes/patient.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import notificationRoutes from './routes/notification.routes';
+import medicationRoutes from './routes/medication.routes';
 
 dotenv.config();
 
@@ -112,6 +113,7 @@ app.use('/api/doctors', doctorRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
+app.use('/api/medications', medicationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationRoutes);
 

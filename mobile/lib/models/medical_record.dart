@@ -39,6 +39,55 @@ class MedicalAttachment {
       fileDataUrl.startsWith('data:image');
 }
 
+class PrescriptionItem {
+  final String id;
+  final String medicationId;
+  final String medicationCode;
+  final String medicationName;
+  final String medicationPresentation;
+  final int quantity;
+  final String dosage;
+  final double unitPrice;
+  final double subtotal;
+
+  PrescriptionItem({
+    required this.id,
+    required this.medicationId,
+    required this.medicationCode,
+    required this.medicationName,
+    required this.medicationPresentation,
+    required this.quantity,
+    required this.dosage,
+    required this.unitPrice,
+    required this.subtotal,
+  });
+
+  factory PrescriptionItem.fromJson(Map<String, dynamic> json) {
+    String medCode = 'MED';
+    String medName = 'Medicamento';
+    String medPres = 'Uds.';
+
+    if (json['medication'] != null && json['medication'] is Map) {
+      final med = json['medication'] as Map<String, dynamic>;
+      medCode = med['code'] as String? ?? medCode;
+      medName = med['name'] as String? ?? medName;
+      medPres = med['presentation'] as String? ?? medPres;
+    }
+
+    return PrescriptionItem(
+      id: json['id'] as String? ?? '',
+      medicationId: json['medicationId'] as String? ?? '',
+      medicationCode: medCode,
+      medicationName: medName,
+      medicationPresentation: medPres,
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      dosage: json['dosage'] as String? ?? '',
+      unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 class MedicalRecord {
   final String id;
   final String appointmentId;
@@ -55,6 +104,9 @@ class MedicalRecord {
   final DateTime? appointmentDate;
   final String? appointmentReason;
   final List<MedicalAttachment> attachments;
+  final double pharmacyTotal;
+  final bool pharmacyPaid;
+  final List<PrescriptionItem> prescriptionItems;
 
   MedicalRecord({
     required this.id,
@@ -72,6 +124,9 @@ class MedicalRecord {
     this.appointmentDate,
     this.appointmentReason,
     this.attachments = const [],
+    this.pharmacyTotal = 0.0,
+    this.pharmacyPaid = false,
+    this.prescriptionItems = const [],
   });
 
   factory MedicalRecord.fromJson(Map<String, dynamic> json) {
@@ -127,6 +182,15 @@ class MedicalRecord {
       }
     }
 
+    final itemsList = <PrescriptionItem>[];
+    if (json['prescriptionItems'] != null && json['prescriptionItems'] is List) {
+      for (final item in json['prescriptionItems']) {
+        if (item is Map<String, dynamic>) {
+          itemsList.add(PrescriptionItem.fromJson(item));
+        }
+      }
+    }
+
     return MedicalRecord(
       id: json['id'] as String? ?? '',
       appointmentId: json['appointmentId'] as String? ?? '',
@@ -143,6 +207,9 @@ class MedicalRecord {
       appointmentDate: appDate,
       appointmentReason: appReason,
       attachments: attachmentsList,
+      pharmacyTotal: (json['pharmacyTotal'] as num?)?.toDouble() ?? 0.0,
+      pharmacyPaid: json['pharmacyPaid'] as bool? ?? false,
+      prescriptionItems: itemsList,
     );
   }
 

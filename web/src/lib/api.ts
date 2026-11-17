@@ -149,6 +149,31 @@ export interface NotificationsResponse {
   notifications: NotificationItem[];
 }
 
+export interface Medication {
+  id: string;
+  code: string;
+  name: string;
+  presentation: string;
+  category: string;
+  price: number;
+  stock: number;
+  minStock: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PrescriptionItem {
+  id: string;
+  medicalRecordId: string;
+  medicationId: string;
+  quantity: number;
+  dosage: string;
+  unitPrice: number;
+  subtotal: number;
+  medication?: Medication;
+}
+
 export interface MedicalRecord {
   id: string;
   appointmentId: string;
@@ -157,6 +182,8 @@ export interface MedicalRecord {
   diagnosis: string;
   prescription: string;
   notes?: string | null;
+  pharmacyTotal?: number;
+  pharmacyPaid?: boolean;
   createdAt: string;
   doctor: {
     id: string;
@@ -176,6 +203,7 @@ export interface MedicalRecord {
     status?: string;
   };
   attachments?: MedicalAttachment[];
+  prescriptionItems?: PrescriptionItem[];
 }
 
 export interface AvailableSlotsResponse {
@@ -250,7 +278,11 @@ export interface PatientSearchResult {
 export interface AnalyticsSummaryResponse {
   financial: {
     totalRevenue: number;
+    consultationRevenue?: number;
+    pharmacyRevenue?: number;
     pendingRevenue: number;
+    pendingConsultationRevenue?: number;
+    pendingPharmacyRevenue?: number;
     currency: string;
   };
   appointments: {
@@ -276,6 +308,22 @@ export interface AnalyticsSummaryResponse {
     totalCount: number;
     revenue: number;
   }[];
+  pharmacy?: {
+    totalMedications: number;
+    lowStockCount: number;
+    lowStockMedications: {
+      id: string;
+      code: string;
+      name: string;
+      presentation: string;
+      category: string;
+      stock: number;
+      minStock: number;
+      price: number;
+    }[];
+    totalRevenue: number;
+    pendingRevenue: number;
+  };
 }
 
 export interface AuthResponse {
@@ -487,6 +535,11 @@ class ApiService {
     diagnosis: string;
     prescription: string;
     notes?: string;
+    items?: {
+      medicationId: string;
+      quantity: number;
+      dosage: string;
+    }[];
   }): Promise<{ message: string; medicalRecord: MedicalRecord }> {
     return this.request<{ message: string; medicalRecord: MedicalRecord }>('/api/medical-records', {
       method: 'POST',
@@ -603,6 +656,73 @@ class ApiService {
     return this.request<{ message: string; review: any }>(`/api/appointments/${appointmentId}/review`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  // Botica y Medicamentos
+  async getMedications(params?: {
+    search?: string;
+    category?: string;
+    lowStock?: boolean;
+  }): Promise<{ count: number; medications: Medication[] }> {
+    const query = new URLSearchParams();
+    if (params?.search) query.append('search', params.search);
+    if (params?.category) query.append('category', params.category);
+    if (params?.lowStock) query.append('lowStock', 'true');
+    const qs = query.toString();
+    return this.request<{ count: number; medications: Medication[] }>(`/api/medications${qs ? `?${qs}` : ''}`, {
+      method: 'GET',
+    });
+  }
+
+  async createMedication(data: {
+    code: string;
+    name: string;
+    presentation: string;
+    category: string;
+    price: number;
+    stock: number;
+    minStock?: number;
+  }): Promise<{ message: string; medication: Medication }> {
+    return this.request<{ message: string; medication: Medication }>('/api/medications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMedication(
+    id: string,
+    data: {
+      code?: string;
+      name?: string;
+      presentation?: string;
+      category?: string;
+      price?: number;
+      stock?: number;
+      replenishQuantity?: number;
+      minStock?: number;
+      isActive?: boolean;
+    }
+  ): Promise<{ message: string; medication: Medication }> {
+    return this.request<{ message: string; medication: Medication }>(`/api/medications/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async dispensePrescription(recordId: string): Promise<{
+    message: string;
+    medicalRecord: MedicalRecord;
+    dispensedItemsCount: number;
+    totalCharged: number;
+  }> {
+    return this.request<{
+      message: string;
+      medicalRecord: MedicalRecord;
+      dispensedItemsCount: number;
+      totalCharged: number;
+    }>(`/api/medical-records/${recordId}/dispense`, {
+      method: 'PATCH',
     });
   }
 }
