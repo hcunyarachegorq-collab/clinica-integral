@@ -18,6 +18,11 @@ const createMedicalRecordSchema = z.object({
   prescription: z.string().min(3, 'La receta / tratamiento debe tener al menos 3 caracteres'),
   notes: z.string().optional(),
   items: z.array(prescriptionItemInputSchema).optional(),
+  labItemIds: z.array(z.string().uuid()).optional(),
+  restDays: z.number().int().min(0).optional(),
+  restStartDate: z.string().optional(),
+  restEndDate: z.string().optional(),
+  cie10Code: z.string().optional(),
 });
 
 // POST /api/medical-records (Solo DOCTOR)
@@ -39,7 +44,31 @@ router.post(
         });
       }
 
-      const { appointmentId, diagnosis, prescription, notes, items } = parseResult.data;
+      const {
+        appointmentId,
+        diagnosis,
+        prescription,
+        notes,
+        items,
+        labItemIds,
+        restDays,
+        restStartDate,
+        restEndDate,
+        cie10Code,
+      } = parseResult.data;
+
+      // Calcular fechas de descanso médico si corresponde
+      let computedRestStart: Date | null = null;
+      let computedRestEnd: Date | null = null;
+      if (restDays && restDays > 0) {
+        computedRestStart = restStartDate ? new Date(restStartDate) : new Date();
+        if (restEndDate) {
+          computedRestEnd = new Date(restEndDate);
+        } else {
+          computedRestEnd = new Date(computedRestStart);
+          computedRestEnd.setDate(computedRestEnd.getDate() + restDays);
+        }
+      }
 
       // Buscar perfil del doctor autenticado
       const doctorProfile = await prisma.doctorProfile.findUnique({
@@ -71,6 +100,17 @@ router.post(
       if (appointment.medicalRecord) {
         return res.status(409).json({ error: 'Esta cita ya cuenta con un registro médico registrado.' });
       }
+
+      // Verificar y cargar exámenes de laboratorio / imágenes seleccionados
+      const verifiedLabItems =
+        labItemIds && labItemIds.length > 0
+          ? await prisma.labCatalogItem.findMany({
+              where: {
+                id: { in: labItemIds },
+                isActive: true,
+              },
+            })
+          : [];
 
       // Procesar y congelar precios de medicamentos de botica si se recetaron
       let pharmacyTotal = 0;
@@ -114,7 +154,7 @@ router.post(
       }
       pharmacyTotal = Number(pharmacyTotal.toFixed(2));
 
-      // Transacción atómica en Prisma: Crear MedicalRecord con items y cambiar Appointment a COMPLETED
+      // Transacción atómica en Prisma: Crear MedicalRecord con items, labOrders y cambiar Appointment a COMPLETED
       const result = await prisma.$transaction(async (tx) => {
         const record = await tx.medicalRecord.create({
           data: {
@@ -126,6 +166,10 @@ router.post(
             notes,
             pharmacyTotal,
             pharmacyPaid: false,
+            restDays: restDays || 0,
+            restStartDate: computedRestStart,
+            restEndDate: computedRestEnd,
+            cie10Code: cie10Code ? cie10Code.trim().toUpperCase() : null,
             prescriptionItems: {
               create: verifiedItems.map((v) => ({
                 medicationId: v.medicationId,
@@ -133,6 +177,15 @@ router.post(
                 dosage: v.dosage,
                 unitPrice: v.unitPrice,
                 subtotal: v.subtotal,
+              })),
+            },
+            labOrders: {
+              create: verifiedLabItems.map((lab) => ({
+                patientId: appointment.patientId,
+                doctorId: doctorProfile.id,
+                catalogItemId: lab.id,
+                price: lab.price,
+                paid: false,
               })),
             },
           },
@@ -160,6 +213,11 @@ router.post(
             prescriptionItems: {
               include: {
                 medication: true,
+              },
+            },
+            labOrders: {
+              include: {
+                catalogItem: true,
               },
             },
           },
@@ -197,6 +255,10 @@ router.post(
           notes: result.notes,
           pharmacyTotal: result.pharmacyTotal,
           pharmacyPaid: result.pharmacyPaid,
+          restDays: result.restDays,
+          restStartDate: result.restStartDate,
+          restEndDate: result.restEndDate,
+          cie10Code: result.cie10Code,
           createdAt: result.createdAt,
           patient: result.patient,
           doctor: {
@@ -207,6 +269,7 @@ router.post(
           },
           appointment: result.appointment,
           prescriptionItems: result.prescriptionItems,
+          labOrders: result.labOrders,
         },
       });
     } catch (error: any) {
@@ -270,6 +333,11 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
             medication: true,
           },
         },
+        labOrders: {
+          include: {
+            catalogItem: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -286,6 +354,10 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         notes: r.notes,
         pharmacyTotal: r.pharmacyTotal,
         pharmacyPaid: r.pharmacyPaid,
+        restDays: r.restDays,
+        restStartDate: r.restStartDate,
+        restEndDate: r.restEndDate,
+        cie10Code: r.cie10Code,
         createdAt: r.createdAt,
         patient: r.patient,
         doctor: {
@@ -297,6 +369,7 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         appointment: r.appointment,
         attachments: r.attachments,
         prescriptionItems: r.prescriptionItems,
+        labOrders: r.labOrders,
       })),
     });
   } catch (error: any) {

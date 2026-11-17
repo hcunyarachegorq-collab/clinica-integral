@@ -88,6 +88,60 @@ class PrescriptionItem {
   }
 }
 
+class LabOrderItem {
+  final String id;
+  final String code;
+  final String name;
+  final String category;
+  final double price;
+  final String status;
+  final String? resultSummary;
+  final String? resultFileName;
+  final bool paid;
+  final DateTime? completedAt;
+
+  LabOrderItem({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.category,
+    required this.price,
+    required this.status,
+    this.resultSummary,
+    this.resultFileName,
+    this.paid = false,
+    this.completedAt,
+  });
+
+  factory LabOrderItem.fromJson(Map<String, dynamic> json) {
+    String code = 'LAB';
+    String name = 'Examen';
+    String category = 'General';
+
+    if (json['catalogItem'] != null && json['catalogItem'] is Map) {
+      final cat = json['catalogItem'] as Map<String, dynamic>;
+      code = cat['code'] as String? ?? code;
+      name = cat['name'] as String? ?? name;
+      category = cat['category'] as String? ?? category;
+    }
+
+    return LabOrderItem(
+      id: json['id'] as String? ?? '',
+      code: code,
+      name: name,
+      category: category,
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      status: json['status'] as String? ?? 'PENDING',
+      resultSummary: json['resultSummary'] as String?,
+      resultFileName: json['resultFileName'] as String?,
+      paid: json['paid'] as bool? ?? false,
+      completedAt: json['completedAt'] != null
+          ? DateTime.tryParse(json['completedAt'].toString())
+          : null,
+    );
+  }
+}
+
 class MedicalRecord {
   final String id;
   final String appointmentId;
@@ -107,6 +161,11 @@ class MedicalRecord {
   final double pharmacyTotal;
   final bool pharmacyPaid;
   final List<PrescriptionItem> prescriptionItems;
+  final int? restDays;
+  final String? restStartDate;
+  final String? restEndDate;
+  final String? cie10Code;
+  final List<LabOrderItem> labOrders;
 
   MedicalRecord({
     required this.id,
@@ -127,6 +186,11 @@ class MedicalRecord {
     this.pharmacyTotal = 0.0,
     this.pharmacyPaid = false,
     this.prescriptionItems = const [],
+    this.restDays,
+    this.restStartDate,
+    this.restEndDate,
+    this.cie10Code,
+    this.labOrders = const [],
   });
 
   factory MedicalRecord.fromJson(Map<String, dynamic> json) {
@@ -191,6 +255,15 @@ class MedicalRecord {
       }
     }
 
+    final labOrdersList = <LabOrderItem>[];
+    if (json['labOrders'] != null && json['labOrders'] is List) {
+      for (final lo in json['labOrders']) {
+        if (lo is Map<String, dynamic>) {
+          labOrdersList.add(LabOrderItem.fromJson(lo));
+        }
+      }
+    }
+
     return MedicalRecord(
       id: json['id'] as String? ?? '',
       appointmentId: json['appointmentId'] as String? ?? '',
@@ -210,6 +283,11 @@ class MedicalRecord {
       pharmacyTotal: (json['pharmacyTotal'] as num?)?.toDouble() ?? 0.0,
       pharmacyPaid: json['pharmacyPaid'] as bool? ?? false,
       prescriptionItems: itemsList,
+      restDays: (json['restDays'] as num?)?.toInt(),
+      restStartDate: json['restStartDate'] as String?,
+      restEndDate: json['restEndDate'] as String?,
+      cie10Code: json['cie10Code'] as String?,
+      labOrders: labOrdersList,
     );
   }
 

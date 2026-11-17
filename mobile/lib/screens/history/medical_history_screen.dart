@@ -494,6 +494,173 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
               ),
             ],
 
+            // Descanso Médico Oficial (Banner)
+            if (record.restDays != null && record.restDays! > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1FAE5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.health_and_safety_rounded,
+                        color: Color(0xFF047857),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Descanso Médico: ${record.restDays} Días Calendario',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF064E3B),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${record.restStartDate != null ? 'Desde: ${record.restStartDate} ' : ''}${record.restEndDate != null ? '• Hasta: ${record.restEndDate} ' : ''}${record.cie10Code != null ? '• CIE-10: ${record.cie10Code}' : ''}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF047857),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Órdenes de Laboratorio & Diagnóstico
+            if (record.labOrders.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  const Icon(Icons.science_rounded,
+                      size: 16, color: Color(0xFF0D9488)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Órdenes de Laboratorio & Diagnóstico (${record.labOrders.length}):',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Column(
+                children: record.labOrders.map((lo) {
+                  final isCompleted = lo.status == 'COMPLETED';
+                  final isInProgress = lo.status == 'IN_PROGRESS';
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${lo.code} • ${lo.name}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                '${lo.category} • S/ ${lo.price.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                              if (lo.resultSummary != null &&
+                                  lo.resultSummary!.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    'Resultado: ${lo.resultSummary}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                      color: Color(0xFF0D9488),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isCompleted
+                                ? const Color(0xFFDCFCE7)
+                                : isInProgress
+                                    ? const Color(0xFFFEF3C7)
+                                    : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: isCompleted
+                                  ? const Color(0xFF86EFAC)
+                                  : isInProgress
+                                      ? const Color(0xFFFDE68A)
+                                      : const Color(0xFFCBD5E1),
+                            ),
+                          ),
+                          child: Text(
+                            isCompleted
+                                ? 'Listo'
+                                : isInProgress
+                                    ? 'En Proceso'
+                                    : 'Pendiente',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isCompleted
+                                  ? const Color(0xFF15803D)
+                                  : isInProgress
+                                      ? const Color(0xFFB45309)
+                                      : const Color(0xFF475569),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+
             // Adjuntos / Estudios de Laboratorio
             if (record.attachments.isNotEmpty) ...[
               const SizedBox(height: 14),
@@ -560,8 +727,58 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
               ),
             ],
 
+            // Botón Oficial: Descargar Certificado de Descanso Médico
+            if (record.restDays != null && record.restDays! > 0) ...[
+              const SizedBox(height: 14),
+              BouncyButton(
+                onTap: () async {
+                  try {
+                    await PdfRecipeService.printRestCertificate(
+                      record: record,
+                      patientNameFallback: user?.fullName,
+                      patientEmailFallback: user?.email,
+                      patientPhoneFallback: user?.phone,
+                    );
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error al generar Certificado: $e'),
+                          backgroundColor: AppTheme.error,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF047857), // Emerald
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.verified_outlined, size: 18, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        'Descargar Certificado de Descanso (PDF)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
             // Botón Oficial: Descargar / Imprimir Receta PDF
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             BouncyButton(
               onTap: () async {
                 try {

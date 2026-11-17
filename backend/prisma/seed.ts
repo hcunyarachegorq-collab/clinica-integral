@@ -813,6 +813,145 @@ async function main() {
   }
   console.log(`[Seed] ${medicationsCatalog.length} medicamentos de botica creados/actualizados.`);
 
+  // 8. Catálogo de Exámenes de Laboratorio e Imágenes Diagnósticas (15)
+  console.log('[Seed] Sembrando catálogo de 15 exámenes de Laboratorio e Imágenes...');
+  const labCatalog = [
+    { code: 'LAB-001', name: 'Hemograma Completo Automatizado + Plaquetas', category: 'Laboratorio', price: 35.00 },
+    { code: 'LAB-002', name: 'Perfil Lipídico Completo (Colesterol, Triglicéridos, HDL, LDL)', category: 'Laboratorio', price: 45.00 },
+    { code: 'LAB-003', name: 'Glucosa en Sangre en Ayunas', category: 'Laboratorio', price: 25.00 },
+    { code: 'LAB-004', name: 'Examen Completo de Orina (EGO) con Sedimento', category: 'Laboratorio', price: 28.00 },
+    { code: 'LAB-005', name: 'Perfil Hepático Completo (TGO, TGP, Bilirrubinas, Fosfatasa)', category: 'Laboratorio', price: 65.00 },
+    { code: 'LAB-006', name: 'Perfil Tiroideo (TSH Ultrasensible, T3, T4 Libre)', category: 'Laboratorio', price: 85.00 },
+    { code: 'LAB-007', name: 'Proteína C Reactiva Cuantitativa (PCR de Alta Sensibilidad)', category: 'Laboratorio', price: 38.00 },
+    { code: 'LAB-008', name: 'Tiempo de Coagulación y Protrombina (TP / TTP)', category: 'Laboratorio', price: 40.00 },
+    { code: 'LAB-009', name: 'Urocultivo con Antibiograma Automatizado', category: 'Laboratorio', price: 55.00 },
+    { code: 'IMG-001', name: 'Radiografía de Tórax Digital (Frontal y Lateral)', category: 'Imágenes', price: 70.00 },
+    { code: 'IMG-002', name: 'Ecografía Abdominal Total (Hígado, Vesícula, Páncreas, Riñones)', category: 'Imágenes', price: 110.00 },
+    { code: 'IMG-003', name: 'Ecografía Renal y Vesical de Alta Resolución', category: 'Imágenes', price: 95.00 },
+    { code: 'IMG-004', name: 'Tomografía Computarizada Axial (TAC) sin Contraste', category: 'Imágenes', price: 180.00 },
+    { code: 'IMG-005', name: 'Radiografía de Columna Lumbar (2 Vistas)', category: 'Imágenes', price: 75.00 },
+    { code: 'CARD-001', name: 'Electrocardiograma de 12 Derivaciones con Informe Médico', category: 'Cardiología Diagnóstica', price: 60.00 },
+  ];
+
+  for (const item of labCatalog) {
+    await prisma.labCatalogItem.upsert({
+      where: { code: item.code },
+      update: {
+        name: item.name,
+        category: item.category,
+        price: item.price,
+        isActive: true,
+      },
+      create: {
+        code: item.code,
+        name: item.name,
+        category: item.category,
+        price: item.price,
+        isActive: true,
+      },
+    });
+  }
+  console.log(`[Seed] ${labCatalog.length} exámenes de laboratorio e imágenes creados/actualizados.`);
+
+  // 9. Camillas / Boxes de Tópico de Urgencias y Observación (6)
+  console.log('[Seed] Sembrando 6 Camillas/Boxes de Tópico y Observación...');
+  const bedsData = [
+    {
+      code: 'BOX-01',
+      name: 'Box 1 - Urgencias y Tópico Respiratorio',
+      status: 'OCCUPIED' as const,
+      currentPatientName: 'Juan Carlos Morales',
+      reason: 'Crisis asmática aguda y dificultad ventilatoria',
+      procedure: 'Nebulización continua con Salbutamol + Vía periférica',
+      fee: 45.00,
+      paid: false,
+      admittedAt: new Date(Date.now() - 42 * 60 * 1000), // Hace 42 minutos
+    },
+    {
+      code: 'BOX-02',
+      name: 'Box 2 - Tópico y Rehidratación Rápida',
+      status: 'OCCUPIED' as const,
+      currentPatientName: 'María Elena Flores',
+      reason: 'Deshidratación moderada secundaria a gastroenteritis',
+      procedure: 'Hidratación intravenosa con Cloruro de Sodio 0.9% 1000ml',
+      fee: 55.00,
+      paid: true,
+      admittedAt: new Date(Date.now() - 85 * 60 * 1000), // Hace 1h 25m
+    },
+    {
+      code: 'BOX-03',
+      name: 'Box 3 - Camilla de Curaciones y Traumatología',
+      status: 'AVAILABLE' as const,
+      currentPatientName: null,
+      reason: null,
+      procedure: null,
+      fee: 0.0,
+      paid: false,
+      admittedAt: null,
+    },
+    {
+      code: 'BOX-04',
+      name: 'Box 4 - Observación Pediátrica',
+      status: 'AVAILABLE' as const,
+      currentPatientName: null,
+      reason: null,
+      procedure: null,
+      fee: 0.0,
+      paid: false,
+      admittedAt: null,
+    },
+    {
+      code: 'BOX-05',
+      name: 'Box 5 - Tópico Polivalente',
+      status: 'AVAILABLE' as const,
+      currentPatientName: null,
+      reason: null,
+      procedure: null,
+      fee: 0.0,
+      paid: false,
+      admittedAt: null,
+    },
+    {
+      code: 'BOX-06',
+      name: 'Box 6 - Aislamiento & Cuidados Especiales',
+      status: 'AVAILABLE' as const,
+      currentPatientName: null,
+      reason: null,
+      procedure: null,
+      fee: 0.0,
+      paid: false,
+      admittedAt: null,
+    },
+  ];
+
+  for (const bed of bedsData) {
+    await prisma.observationBed.upsert({
+      where: { code: bed.code },
+      update: {
+        name: bed.name,
+        status: bed.status,
+        currentPatientName: bed.currentPatientName,
+        reason: bed.reason,
+        procedure: bed.procedure,
+        fee: bed.fee,
+        paid: bed.paid,
+        admittedAt: bed.admittedAt,
+      },
+      create: {
+        code: bed.code,
+        name: bed.name,
+        status: bed.status,
+        currentPatientName: bed.currentPatientName,
+        reason: bed.reason,
+        procedure: bed.procedure,
+        fee: bed.fee,
+        paid: bed.paid,
+        admittedAt: bed.admittedAt,
+      },
+    });
+  }
+  console.log(`[Seed] ${bedsData.length} camillas de observación y tópico creadas/actualizadas.`);
+
   console.log('--- Seed completado exitosamente ---');
 }
 

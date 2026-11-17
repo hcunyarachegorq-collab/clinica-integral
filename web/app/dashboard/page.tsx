@@ -52,6 +52,10 @@ import {
   ChevronRight,
   Pill,
   Package,
+  FlaskConical,
+  BedDouble,
+  FileCheck,
+  Timer,
 } from 'lucide-react';
 import {
   api,
@@ -71,6 +75,11 @@ import {
   NotificationItem,
   Medication,
   PrescriptionItem,
+  LabCatalogItem,
+  LabOrder,
+  LabOrderStatus,
+  ObservationBed,
+  BedStatus,
 } from '../../src/lib/api';
 import { useAuth } from '../../src/context/AuthContext';
 import { useToast } from '../../src/context/ToastContext';
@@ -113,8 +122,52 @@ function DashboardContent() {
     return days;
   }, [weekOffset]);
 
-  // Pestañas activas: 'appointments', 'records', 'patients', 'blocked_dates', 'analytics', 'admin_management', 'pharmacy', 'profile'
-  const [activeTab, setActiveTab] = useState<'appointments' | 'records' | 'patients' | 'blocked_dates' | 'analytics' | 'admin_management' | 'pharmacy' | 'profile'>('appointments');
+  // Pestañas activas: 'appointments', 'records', 'patients', 'lab_orders', 'observation_beds', 'blocked_dates', 'analytics', 'admin_management', 'pharmacy', 'profile'
+  const [activeTab, setActiveTab] = useState<'appointments' | 'records' | 'patients' | 'lab_orders' | 'observation_beds' | 'blocked_dates' | 'analytics' | 'admin_management' | 'pharmacy' | 'profile'>('appointments');
+
+  // Estados para Laboratorio e Imágenes Diagnósticas
+  const [labCatalog, setLabCatalog] = useState<LabCatalogItem[]>([]);
+  const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
+  const [loadingLabOrders, setLoadingLabOrders] = useState<boolean>(false);
+  const [labStatusFilter, setLabStatusFilter] = useState<string>('TODOS');
+  const [labSearchQuery, setLabSearchQuery] = useState<string>('');
+
+  // Modales de Laboratorio
+  const [selectedOrderForResult, setSelectedOrderForResult] = useState<LabOrder | null>(null);
+  const [resultSummaryText, setResultSummaryText] = useState<string>('');
+  const [resultFileBase64, setResultFileBase64] = useState<string>('');
+  const [resultFileName, setResultFileName] = useState<string>('');
+  const [resultSubmitting, setResultSubmitting] = useState<boolean>(false);
+  const [resultError, setResultError] = useState<string | null>(null);
+  const [viewResultModal, setViewResultModal] = useState<LabOrder | null>(null);
+
+  // Estados para Tópico de Urgencias y Camillas de Observación
+  const [bedsList, setBedsList] = useState<ObservationBed[]>([]);
+  const [loadingBeds, setLoadingBeds] = useState<boolean>(false);
+
+  // Modales de Camillas / Tópico
+  const [selectedBedForAdmit, setSelectedBedForAdmit] = useState<ObservationBed | null>(null);
+  const [admitPatientName, setAdmitPatientName] = useState<string>('');
+  const [admitReason, setAdmitReason] = useState<string>('');
+  const [admitProcedure, setAdmitProcedure] = useState<string>('Nebulización continua y monitorización');
+  const [admitFee, setAdmitFee] = useState<string>('45.00');
+  const [admitSubmitting, setAdmitSubmitting] = useState<boolean>(false);
+  const [admitError, setAdmitError] = useState<string | null>(null);
+
+  const [selectedBedForDischarge, setSelectedBedForDischarge] = useState<ObservationBed | null>(null);
+  const [dischargePaid, setDischargePaid] = useState<boolean>(true);
+  const [dischargeNextStatus, setDischargeNextStatus] = useState<'AVAILABLE' | 'CLEANING'>('AVAILABLE');
+  const [dischargeSubmitting, setDischargeSubmitting] = useState<boolean>(false);
+
+  // Estados para Descanso Médico Oficial para Impresión
+  const [printRestCertRecord, setPrintRestCertRecord] = useState<MedicalRecord | null>(null);
+
+  // Estados de Laboratorio y Descanso Médico en Atención (Doctor)
+  const [doctorLabCatalog, setDoctorLabCatalog] = useState<LabCatalogItem[]>([]);
+  const [selectedLabItemIds, setSelectedLabItemIds] = useState<string[]>([]);
+  const [recordRestDays, setRecordRestDays] = useState<number>(0);
+  const [recordRestStartDate, setRecordRestStartDate] = useState<string>('');
+  const [recordCie10Code, setRecordCie10Code] = useState<string>('');
 
   // Estados para Botica Interna & Stock (Admin)
   const [medications, setMedications] = useState<Medication[]>([]);
@@ -429,12 +482,69 @@ function DashboardContent() {
     }
   }, []);
 
+  // Laboratorio & Diagnóstico por Imágenes: Cargar órdenes y catálogo
+  const loadLabOrders = useCallback(async () => {
+    setLoadingLabOrders(true);
+    try {
+      const res = await api.getLabOrders({
+        status: labStatusFilter !== 'TODOS' ? labStatusFilter : undefined,
+        search: labSearchQuery.trim() || undefined,
+      });
+      setLabOrders(res.orders);
+    } catch (err: any) {
+      console.error('Error al cargar órdenes de laboratorio:', err);
+    } finally {
+      setLoadingLabOrders(false);
+    }
+  }, [labStatusFilter, labSearchQuery]);
+
+  const loadLabCatalog = useCallback(async () => {
+    try {
+      const res = await api.getLabCatalog();
+      setLabCatalog(res.items);
+    } catch (err: any) {
+      console.error('Error al cargar catálogo de laboratorio:', err);
+    }
+  }, []);
+
+  // Tópico de Urgencias & Camillas de Observación: Cargar camillas
+  const loadBeds = useCallback(async () => {
+    setLoadingBeds(true);
+    try {
+      const res = await api.getBeds();
+      setBedsList(res.beds);
+    } catch (err: any) {
+      console.error('Error al cargar camillas de tópico:', err);
+    } finally {
+      setLoadingBeds(false);
+    }
+  }, []);
+
   // Cargar medicamentos de botica al abrir pestaña de botica
   useEffect(() => {
     if (activeTab === 'pharmacy' && user?.role === 'ADMIN') {
       loadMedications();
     }
   }, [activeTab, user, loadMedications]);
+
+  // Cargar órdenes y catálogo de laboratorio al abrir pestaña
+  useEffect(() => {
+    if (activeTab === 'lab_orders') {
+      loadLabOrders();
+      loadLabCatalog();
+    }
+  }, [activeTab, loadLabOrders, loadLabCatalog]);
+
+  // Cargar camillas al abrir pestaña de tópico de urgencias
+  useEffect(() => {
+    if (activeTab === 'observation_beds') {
+      loadBeds();
+      const interval = setInterval(() => {
+        loadBeds();
+      }, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, loadBeds]);
 
   // Slots para agendamiento desde Directorio de Pacientes (Admin/Recepción)
   useEffect(() => {
@@ -510,6 +620,21 @@ function DashboardContent() {
       } catch (err) {
         console.error('Error al cargar catálogo de medicamentos para consulta:', err);
       }
+
+      // Cargar catálogo de laboratorio e imágenes diagnósticas
+      try {
+        const labRes = await api.getLabCatalog();
+        const activeLab = labRes.items.filter((item) => item.isActive);
+        setDoctorLabCatalog(activeLab);
+      } catch (err) {
+        console.error('Error al cargar catálogo de laboratorio:', err);
+      }
+
+      // Reiniciar estados de laboratorio y descanso médico para la nueva atención
+      setSelectedLabItemIds([]);
+      setRecordRestDays(0);
+      setRecordRestStartDate(new Date().toISOString().split('T')[0]);
+      setRecordCie10Code('');
     }
     fetchPatientHistoryAndMeds();
   }, [selectedAppForRecord]);
@@ -660,6 +785,10 @@ function DashboardContent() {
         prescription: recordPrescription.trim(),
         notes: recordNotes.trim() || undefined,
         items: itemsPayload,
+        labItemIds: selectedLabItemIds.length > 0 ? selectedLabItemIds : undefined,
+        restDays: recordRestDays > 0 ? recordRestDays : undefined,
+        restStartDate: recordRestDays > 0 && recordRestStartDate ? recordRestStartDate : undefined,
+        cie10Code: recordRestDays > 0 && recordCie10Code.trim() ? recordCie10Code.trim() : undefined,
       });
 
       const [appRes, recRes] = await Promise.all([
@@ -674,6 +803,10 @@ function DashboardContent() {
       setRecordPrescription('');
       setRecordNotes('');
       setPrescribedMedItems([]);
+      setSelectedLabItemIds([]);
+      setRecordRestDays(0);
+      setRecordRestStartDate('');
+      setRecordCie10Code('');
       toast.success('¡Atención médica registrada y cita completada!');
     } catch (err: any) {
       setRecordError(err.message || 'Error al registrar la consulta.');
@@ -830,6 +963,120 @@ function DashboardContent() {
       }
     } catch (err: any) {
       toast.error(err.message || 'Error al despachar receta');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Laboratorio: Cobrar examen en caja
+  const handlePayLabOrder = async (orderId: string) => {
+    setActionLoading(orderId);
+    try {
+      const res = await api.payLabOrder(orderId);
+      toast.success(res.message || 'Examen cobrado y registrado en caja.');
+      setLabOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, paid: true, status: o.status === 'PENDING' ? 'IN_PROGRESS' : o.status } : o))
+      );
+      if (user?.role === 'ADMIN') {
+        api.getAnalyticsSummary().then(setAnalytics).catch(() => {});
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Error al procesar cobro del examen');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Laboratorio: Guardar resultado y subir informe
+  const handleSaveLabResult = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrderForResult) return;
+    setResultSubmitting(true);
+    setResultError(null);
+    try {
+      const res = await api.saveLabOrderResult(selectedOrderForResult.id, {
+        resultSummary: resultSummaryText.trim(),
+        resultFileBase64: resultFileBase64 || undefined,
+        resultFileName: resultFileName || undefined,
+      });
+      toast.success(res.message || '¡Resultado de examen registrado con éxito!');
+      setLabOrders((prev) =>
+        prev.map((o) => (o.id === selectedOrderForResult.id ? res.order : o))
+      );
+      setSelectedOrderForResult(null);
+      setResultSummaryText('');
+      setResultFileBase64('');
+      setResultFileName('');
+    } catch (err: any) {
+      setResultError(err.message || 'Error al guardar resultado');
+      toast.error(err.message || 'Error al guardar resultado');
+    } finally {
+      setResultSubmitting(false);
+    }
+  };
+
+  // Tópico: Ingreso de paciente a camilla
+  const handleAdmitBed = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBedForAdmit) return;
+    setAdmitSubmitting(true);
+    setAdmitError(null);
+    try {
+      const feeNum = parseFloat(admitFee) || 0;
+      const res = await api.admitPatientToBed(selectedBedForAdmit.id, {
+        currentPatientName: admitPatientName.trim(),
+        reason: admitReason.trim(),
+        procedure: admitProcedure.trim() || undefined,
+        fee: feeNum,
+      });
+      toast.success(res.message || 'Paciente ingresado a camilla de tópico.');
+      setBedsList((prev) =>
+        prev.map((b) => (b.id === selectedBedForAdmit.id ? res.bed : b))
+      );
+      setSelectedBedForAdmit(null);
+      setAdmitPatientName('');
+      setAdmitReason('');
+    } catch (err: any) {
+      setAdmitError(err.message || 'Error al ingresar paciente a camilla');
+      toast.error(err.message || 'Error al ingresar paciente a camilla');
+    } finally {
+      setAdmitSubmitting(false);
+    }
+  };
+
+  // Tópico: Alta y liquidación de camilla
+  const handleDischargeBed = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBedForDischarge) return;
+    setDischargeSubmitting(true);
+    try {
+      const res = await api.dischargeBed(selectedBedForDischarge.id, {
+        paid: dischargePaid,
+        nextStatus: dischargeNextStatus,
+      });
+      toast.success(res.message || 'Paciente dado de alta de camilla.');
+      setBedsList((prev) =>
+        prev.map((b) => (b.id === selectedBedForDischarge.id ? res.bed : b))
+      );
+      setSelectedBedForDischarge(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al dar de alta la camilla');
+    } finally {
+      setDischargeSubmitting(false);
+    }
+  };
+
+  // Tópico: Actualizar estado de camilla (ej. marcar como AVAILABLE tras limpieza)
+  const handleUpdateBedStatus = async (bedId: string, status: BedStatus) => {
+    setActionLoading(bedId);
+    try {
+      const res = await api.updateBedStatus(bedId, status);
+      toast.success(res.message || `Estado de camilla actualizado a ${status}`);
+      setBedsList((prev) =>
+        prev.map((b) => (b.id === bedId ? res.bed : b))
+      );
+    } catch (err: any) {
+      toast.error(err.message || 'Error al cambiar estado de camilla');
     } finally {
       setActionLoading(null);
     }
@@ -1432,6 +1679,104 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* VISTA IMPRIMIBLE: CERTIFICADO DE DESCANSO MÉDICO */}
+      {printRestCertRecord && (
+        <div className="hidden print:block fixed inset-0 bg-white text-black p-10 font-sans z-[9999]">
+          <div className="border-b-4 border-emerald-800 pb-4 mb-6 flex justify-between items-start">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-800 text-white flex items-center justify-center font-black text-lg">
+                  +
+                </div>
+                <div>
+                  <h1 className="text-2xl font-black text-emerald-950 tracking-tight">CLÍNICA MÉDICA SAN JUAN</h1>
+                  <p className="text-xs font-semibold text-emerald-700">COMPLEJO HOSPITALARIO & CENTRO DE ESPECIALIDADES</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">Av. Médica Central 1024 • RUC: 20491029381 • Tel: +51 1 800-CLINICA</p>
+            </div>
+            <div className="text-right text-xs">
+              <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-900 font-black text-xs rounded border border-emerald-300 mb-1">
+                CERTIFICADO OFICIAL
+              </span>
+              <p><span className="font-bold">Nº Folio:</span> CDM-{printRestCertRecord.id.slice(0, 8).toUpperCase()}</p>
+              <p><span className="font-bold">Fecha de Emisión:</span> {new Date(printRestCertRecord.createdAt).toLocaleDateString('es-ES')}</p>
+            </div>
+          </div>
+
+          <div className="text-center my-6">
+            <h2 className="text-xl font-black tracking-wide text-gray-900 uppercase border-y-2 border-gray-300 py-2">
+              CERTIFICADO MÉDICO DE INCAPACIDAD TEMPORAL / DESCANSO MÉDICO
+            </h2>
+          </div>
+
+          <div className="bg-gray-50 p-5 rounded-lg mb-6 text-sm grid grid-cols-2 gap-4 border border-gray-200">
+            <div>
+              <p className="text-xs text-gray-500 uppercase font-bold">Datos del Paciente</p>
+              <p className="text-base font-bold text-gray-900 mt-1">{printRestCertRecord.patient.fullName}</p>
+              <p className="text-xs text-gray-600">Email: {printRestCertRecord.patient.email}</p>
+              {printRestCertRecord.patient.phone && <p className="text-xs text-gray-600">Teléfono: {printRestCertRecord.patient.phone}</p>}
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase font-bold">Médico Tratante Emisor</p>
+              <p className="text-base font-bold text-gray-900 mt-1">{printRestCertRecord.doctor.fullName}</p>
+              <p className="text-xs text-gray-600">Especialidad: {printRestCertRecord.doctor.specialty}</p>
+              <p className="text-xs text-gray-600">Nº Colegiatura: <strong className="font-mono">{printRestCertRecord.doctor.licenseNumber || 'N/A'}</strong></p>
+            </div>
+          </div>
+
+          <div className="space-y-6 text-sm">
+            <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-2">
+              <h3 className="font-bold text-gray-800 uppercase text-xs tracking-wider">I. Diagnóstico Médico Clínico</h3>
+              <p className="text-gray-900 font-medium">{printRestCertRecord.diagnosis}</p>
+              {printRestCertRecord.cie10Code && (
+                <p className="text-xs text-gray-600">
+                  Clasificación Internacional de Enfermedades (CIE-10): <span className="font-mono font-bold text-emerald-800">{printRestCertRecord.cie10Code}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="p-5 rounded-xl border-2 border-emerald-800 bg-emerald-50/50 space-y-3">
+              <h3 className="font-bold text-emerald-950 uppercase text-xs tracking-wider">II. Prescripción de Descanso Médico</h3>
+              <p className="text-base text-gray-900">
+                Por la presente se certifica que el/la paciente antes mencionado(a) requiere reposo físico e incapacidad temporal para el trabajo/estudio durante un período de:
+              </p>
+              <div className="text-center py-3 bg-white rounded-lg border border-emerald-200">
+                <span className="text-3xl font-black text-emerald-900">{printRestCertRecord.restDays || 0} DÍAS CALENDARIO</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-gray-700 pt-2 border-t border-emerald-200">
+                <div>
+                  Fecha de Inicio: <span className="font-bold text-gray-900">{printRestCertRecord.restStartDate ? new Date(printRestCertRecord.restStartDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Fecha de emisión'}</span>
+                </div>
+                <div>
+                  Fecha de Culminación: <span className="font-bold text-gray-900">{printRestCertRecord.restEndDate ? new Date(printRestCertRecord.restEndDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {printRestCertRecord.notes && (
+              <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs">
+                <p className="font-bold text-gray-700">Recomendaciones y Observaciones:</p>
+                <p className="text-gray-600 italic mt-1">{printRestCertRecord.notes}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-24 pt-8 border-t border-gray-300 flex justify-between items-end text-xs text-gray-500">
+            <div>
+              <p>Documento médico legal expedido para los fines que el interesado estime conveniente.</p>
+              <p>Clínica Médica San Juan • Sistema de Gestión Hospitalaria Integral</p>
+            </div>
+            <div className="text-center w-64 border-t border-dashed border-gray-400 pt-3">
+              <p className="font-bold text-gray-900">{printRestCertRecord.doctor.fullName}</p>
+              <p>{printRestCertRecord.doctor.specialty}</p>
+              <p>CMP / Reg: {printRestCertRecord.doctor.licenseNumber}</p>
+              <p className="text-[10px] text-gray-400 mt-2 font-mono">FIRMA Y SELLO PROFESIONAL</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 backdrop-blur-md bg-slate-950/80 border-b border-slate-800 print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
@@ -1591,6 +1936,34 @@ function DashboardContent() {
               <ClipboardList className="h-3.5 w-3.5" />
               <span>Historial ({medicalRecords.length})</span>
             </button>
+
+            {/* Pestaña Laboratorio & Imágenes (Todos) */}
+            <button
+              onClick={() => setActiveTab('lab_orders')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                activeTab === 'lab_orders'
+                  ? 'bg-cyan-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <FlaskConical className="h-3.5 w-3.5" />
+              <span>Laboratorio & Imágenes</span>
+            </button>
+
+            {/* Pestaña Tópico & Camillas (ADMIN, DOCTOR, RECEPTIONIST) */}
+            {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
+              <button
+                onClick={() => setActiveTab('observation_beds')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  activeTab === 'observation_beds'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <BedDouble className="h-3.5 w-3.5" />
+                <span>Tópico & Camillas</span>
+              </button>
+            )}
 
             {/* Pestaña Pacientes (ADMIN, DOCTOR, RECEPTIONIST) */}
             {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
@@ -2512,16 +2885,31 @@ function DashboardContent() {
                           </p>
                         </div>
 
-                        <button
-                          onClick={() => {
-                            setPrintRecord(rec);
-                            setTimeout(() => window.print(), 150);
-                          }}
-                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all"
-                        >
-                          <Printer className="h-4 w-4 text-teal-400" />
-                          <span>Imprimir Receta (PDF)</span>
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {rec.restDays && rec.restDays > 0 && (
+                            <button
+                              onClick={() => {
+                                setPrintRestCertRecord(rec);
+                                setTimeout(() => window.print(), 150);
+                              }}
+                              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-950/40 hover:bg-emerald-900/40 text-emerald-300 border border-emerald-500/30 transition-all"
+                            >
+                              <FileCheck className="h-4 w-4 text-emerald-400" />
+                              <span>Descanso Médico ({rec.restDays} d)</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setPrintRecord(rec);
+                              setTimeout(() => window.print(), 150);
+                            }}
+                            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all"
+                          >
+                            <Printer className="h-4 w-4 text-teal-400" />
+                            <span>Imprimir Receta (PDF)</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="space-y-1">
@@ -2619,6 +3007,104 @@ function DashboardContent() {
 
                       {rec.notes && (
                         <div className="text-xs text-slate-400 italic">Notas: {rec.notes}</div>
+                      )}
+
+                      {/* Órdenes de Laboratorio e Imágenes de esta Consulta */}
+                      {rec.labOrders && rec.labOrders.length > 0 && (
+                        <div className="space-y-2 p-4 rounded-xl bg-slate-950/90 border border-slate-800">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                            <div className="flex items-center gap-2">
+                              <FlaskConical className="h-4 w-4 text-cyan-400" />
+                              <span className="text-xs font-bold uppercase tracking-wider text-white">
+                                Exámenes de Laboratorio & Imágenes Solicitados ({rec.labOrders.length})
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-mono text-cyan-400">
+                              Total: S/ {rec.labOrders.reduce((acc, lo) => acc + (lo.price || 0), 0).toFixed(2)}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            {rec.labOrders.map((lo) => (
+                              <div
+                                key={lo.id}
+                                className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-2"
+                              >
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-bold">
+                                      {lo.catalogItem?.code || 'LAB'}
+                                    </span>
+                                    <span className="text-xs font-semibold text-white">
+                                      {lo.catalogItem?.name || 'Examen'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                                    {lo.catalogItem?.category} • S/ {(lo.price || 0).toFixed(2)}
+                                  </span>
+                                </div>
+                                <div className="text-right">
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      lo.status === 'COMPLETED'
+                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                        : lo.status === 'IN_PROGRESS'
+                                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                        : 'bg-slate-800 text-slate-300'
+                                    }`}
+                                  >
+                                    {lo.status === 'COMPLETED'
+                                      ? 'Completado'
+                                      : lo.status === 'IN_PROGRESS'
+                                      ? 'En Proceso'
+                                      : 'Pendiente'}
+                                  </span>
+                                  {lo.status === 'COMPLETED' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewResultModal(lo)}
+                                      className="text-[10px] text-cyan-400 hover:underline block mt-1 font-semibold"
+                                    >
+                                      Ver Informe
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Certificado de Descanso Médico Otorgado */}
+                      {rec.restDays && rec.restDays > 0 && (
+                        <div className="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-900/40 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                              <FileCheck className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-white">
+                                Certificado Oficial de Descanso Médico: <span className="text-emerald-400">{rec.restDays} Días Calendario</span>
+                              </p>
+                              <p className="text-[11px] text-slate-400">
+                                {rec.restStartDate && `Desde: ${new Date(rec.restStartDate).toLocaleDateString('es-ES')}`}
+                                {rec.restEndDate && ` • Hasta: ${new Date(rec.restEndDate).toLocaleDateString('es-ES')}`}
+                                {rec.cie10Code && ` • Diagnóstico CIE-10: ${rec.cie10Code}`}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPrintRestCertRecord(rec);
+                              setTimeout(() => window.print(), 150);
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm shrink-0 flex items-center gap-1.5"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            <span>Imprimir</span>
+                          </button>
+                        </div>
                       )}
 
                       {/* Adjuntos y Resultados de Laboratorio */}
@@ -3588,6 +4074,517 @@ function DashboardContent() {
         )}
 
         {/* ============================================================== */}
+        {/* PESTAÑA: LABORATORIO CLÍNICO & IMÁGENES DIAGNÓSTICAS           */}
+        {/* ============================================================== */}
+        {activeTab === 'lab_orders' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <FlaskConical className="h-5 w-5 text-cyan-400" />
+                  Laboratorio Clínico & Diagnóstico por Imágenes
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Gestión integral de órdenes médicas, estado de procesamiento, cobranza y entrega de informes
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono px-3 py-1 bg-slate-900 border border-slate-800 rounded-full text-slate-300">
+                  {labOrders.length} órdenes registradas
+                </span>
+                <button
+                  onClick={loadLabOrders}
+                  disabled={loadingLabOrders}
+                  className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-cyan-400 transition-all"
+                  title="Refrescar órdenes"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingLabOrders ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Barra de Filtros y Buscador */}
+            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div className="relative w-full md:w-80">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={labSearchQuery}
+                  onChange={(e) => setLabSearchQuery(e.target.value)}
+                  placeholder="Buscar por paciente, examen o código..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto">
+                {(['TODOS', 'PENDING', 'IN_PROGRESS', 'COMPLETED'] as const).map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setLabStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      labStatusFilter === st
+                        ? 'bg-cyan-600 text-white shadow-md'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {st === 'TODOS'
+                      ? 'Todos'
+                      : st === 'PENDING'
+                      ? 'Pendientes'
+                      : st === 'IN_PROGRESS'
+                      ? 'En Proceso'
+                      : 'Completados'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Listado de Órdenes */}
+            {loadingLabOrders ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            ) : labOrders.length === 0 ? (
+              <div className="p-16 text-center rounded-2xl bg-slate-900/40 border border-slate-800 space-y-3">
+                <FlaskConical className="h-12 w-12 text-slate-600 mx-auto" />
+                <p className="text-sm text-slate-400">No se encontraron órdenes de laboratorio o imágenes.</p>
+                <p className="text-xs text-slate-500">
+                  Las órdenes se generan automáticamente cuando el médico las solicita en su consulta médica.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {labOrders.map((order) => {
+                  const orderDate = new Date(order.createdAt);
+                  return (
+                    <div
+                      key={order.id}
+                      className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-all space-y-4"
+                    >
+                      <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-800">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-mono text-xs font-bold text-cyan-300 px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/60">
+                              {order.catalogItem?.code || 'LAB'}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {orderDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                            <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                              {order.catalogItem?.category || 'General'}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-white text-base">
+                            {order.catalogItem?.name}
+                          </h4>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Paciente: <strong className="text-slate-200">{order.patient.fullName}</strong>
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Médico: {order.doctor.user?.fullName} ({order.doctor.specialty?.name})
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0 space-y-1">
+                          <span className="text-sm font-mono font-black text-emerald-400 block">
+                            S/ {(order.price || 0).toFixed(2)}
+                          </span>
+                          {order.paid ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                              <Check className="h-3 w-3" /> PAGADO
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                              <Clock className="h-3 w-3" /> PENDIENTE PAGO
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {order.notes && (
+                        <div className="text-xs text-slate-400 italic bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+                          Indicaciones médicas: &quot;{order.notes}&quot;
+                        </div>
+                      )}
+
+                      {/* Estado del Examen */}
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500">Estado de toma/informe:</span>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 ${
+                              order.status === 'COMPLETED'
+                                ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                                : order.status === 'IN_PROGRESS'
+                                ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30'
+                                : 'bg-slate-800 text-slate-300'
+                            }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                order.status === 'COMPLETED'
+                                  ? 'bg-emerald-400'
+                                  : order.status === 'IN_PROGRESS'
+                                  ? 'bg-cyan-400 animate-ping'
+                                  : 'bg-slate-400'
+                              }`}
+                            />
+                            {order.status === 'COMPLETED'
+                              ? 'Completado'
+                              : order.status === 'IN_PROGRESS'
+                              ? 'En Proceso'
+                              : 'Pendiente'}
+                          </span>
+                        </div>
+
+                        {order.completedAt && (
+                          <span className="text-[10px] text-slate-500">
+                            Listo: {new Date(order.completedAt).toLocaleDateString('es-ES')}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Resumen del Resultado si está completado */}
+                      {order.resultSummary && (
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                          <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider block">
+                            Resultado / Conclusión Diagnóstica:
+                          </span>
+                          <p className="text-xs text-slate-200 line-clamp-2">
+                            {order.resultSummary}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Botones de Acción */}
+                      <div className="pt-2 flex items-center justify-end gap-2 flex-wrap border-t border-slate-800/60">
+                        {/* Botón Cobrar en Caja */}
+                        {(user.role === 'ADMIN' || user.role === 'RECEPTIONIST') && !order.paid && (
+                          <button
+                            type="button"
+                            onClick={() => handlePayLabOrder(order.id)}
+                            disabled={actionLoading === order.id}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md flex items-center gap-1 transition-all"
+                          >
+                            {actionLoading === order.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            )}
+                            <span>Cobrar en Caja (S/ {(order.price || 0).toFixed(2)})</span>
+                          </button>
+                        )}
+
+                        {/* Botón Registrar Resultado (Doctor o Admin) */}
+                        {(user.role === 'DOCTOR' || user.role === 'ADMIN') && order.status !== 'COMPLETED' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedOrderForResult(order);
+                              setResultSummaryText(order.resultSummary || '');
+                              setResultFileBase64(order.resultFileBase64 || '');
+                              setResultFileName(order.resultFileName || '');
+                            }}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white shadow-md flex items-center gap-1 transition-all"
+                          >
+                            <FlaskConical className="h-3.5 w-3.5" />
+                            <span>Registrar Resultado / Informe</span>
+                          </button>
+                        )}
+
+                        {/* Botón Ver Resultado Completo */}
+                        {order.status === 'COMPLETED' && (
+                          <button
+                            type="button"
+                            onClick={() => setViewResultModal(order)}
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 flex items-center gap-1.5 transition-all"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-cyan-400" />
+                            <span>Ver Informe & Adjunto</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* PESTAÑA: TÓPICO DE URGENCIAS & CAMILLAS DE OBSERVACIÓN         */}
+        {/* ============================================================== */}
+        {activeTab === 'observation_beds' && (user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <BedDouble className="h-5 w-5 text-indigo-400" />
+                  Tópico de Urgencias & Camillas de Observación
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Panel en vivo de boxes de atención ambulatoria, nebulizaciones, hidratación parenteral y procedimientos
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadBeds}
+                  disabled={loadingBeds}
+                  className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-indigo-400 transition-all"
+                  title="Refrescar estado de camillas"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingBeds ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* KPI Cards de Estado de Camillas */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-900/40 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-emerald-400 font-semibold uppercase tracking-wider block">Disponibles</span>
+                  <span className="text-2xl font-black text-emerald-200 font-mono">
+                    {bedsList.filter((b) => b.status === 'AVAILABLE').length} de {bedsList.length}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-900/40 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-amber-400 font-semibold uppercase tracking-wider block">Ocupadas (En Tópico)</span>
+                  <span className="text-2xl font-black text-amber-200 font-mono">
+                    {bedsList.filter((b) => b.status === 'OCCUPIED').length} de {bedsList.length}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <Activity className="h-6 w-6" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-cyan-950/20 border border-cyan-900/40 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-cyan-400 font-semibold uppercase tracking-wider block">En Desinfección</span>
+                  <span className="text-2xl font-black text-cyan-200 font-mono">
+                    {bedsList.filter((b) => b.status === 'CLEANING').length} de {bedsList.length}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+              </div>
+            </div>
+
+            {/* Grid Visual de 6 Camillas */}
+            {loadingBeds ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {bedsList.map((bed) => {
+                  const isAvailable = bed.status === 'AVAILABLE';
+                  const isOccupied = bed.status === 'OCCUPIED';
+                  const isCleaning = bed.status === 'CLEANING';
+
+                  // Cálculo de tiempo transcurrido
+                  let elapsedStr = 'Reciente';
+                  if (bed.admittedAt) {
+                    const diffMs = Date.now() - new Date(bed.admittedAt).getTime();
+                    const diffMins = Math.max(0, Math.floor(diffMs / 60000));
+                    if (diffMins < 60) {
+                      elapsedStr = `${diffMins} min`;
+                    } else {
+                      const h = Math.floor(diffMins / 60);
+                      const m = diffMins % 60;
+                      elapsedStr = `${h}h ${m}m`;
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={bed.id}
+                      className={`rounded-2xl border transition-all p-5 flex flex-col justify-between space-y-4 ${
+                        isAvailable
+                          ? 'bg-slate-900/70 border-slate-800 hover:border-emerald-500/40'
+                          : isOccupied
+                          ? 'bg-slate-900/95 border-amber-500/40 shadow-lg shadow-amber-950/20'
+                          : 'bg-slate-900/70 border-cyan-500/30'
+                      }`}
+                    >
+                      {/* Cabecera de la Camilla */}
+                      <div className="flex items-start justify-between pb-3 border-b border-slate-800">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`p-2.5 rounded-xl border ${
+                              isAvailable
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : isOccupied
+                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                            }`}
+                          >
+                            <BedDouble className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <span className="font-mono text-xs font-extrabold text-slate-300 block">
+                              {bed.code}
+                            </span>
+                            <h4 className="font-bold text-white text-sm">{bed.name}</h4>
+                          </div>
+                        </div>
+
+                        {/* Badge de Estado con Pulso */}
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 ${
+                            isAvailable
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                              : isOccupied
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                              : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
+                          }`}
+                        >
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              isAvailable
+                                ? 'bg-emerald-400'
+                                : isOccupied
+                                ? 'bg-amber-400 animate-pulse'
+                                : 'bg-cyan-400'
+                            }`}
+                          />
+                          {isAvailable ? 'Disponible' : isOccupied ? 'Ocupado' : 'Limpieza'}
+                        </span>
+                      </div>
+
+                      {/* Cuerpo de la Camilla */}
+                      <div className="space-y-3 flex-1">
+                        {isAvailable && (
+                          <div className="py-6 text-center space-y-2">
+                            <CheckCircle2 className="h-10 w-10 text-emerald-500/40 mx-auto" />
+                            <p className="text-xs text-slate-400">
+                              Camilla libre, desinfectada y lista para recepción de paciente.
+                            </p>
+                          </div>
+                        )}
+
+                        {isOccupied && (
+                          <div className="space-y-2.5 text-xs">
+                            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                Paciente en Observación:
+                              </span>
+                              <p className="font-bold text-white text-sm flex items-center gap-1.5">
+                                <User className="h-4 w-4 text-amber-400" />
+                                {bed.currentPatientName || 'Paciente Anónimo'}
+                              </p>
+                              {bed.reason && (
+                                <p className="text-slate-300 pt-1">
+                                  <strong>Motivo:</strong> {bed.reason}
+                                </p>
+                              )}
+                              {bed.procedure && (
+                                <p className="text-amber-300/90 font-mono text-[11px]">
+                                  <strong>Tratamiento:</strong> {bed.procedure}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                              <span className="flex items-center gap-1 font-mono text-amber-300">
+                                <Timer className="h-3.5 w-3.5" />
+                                Transcurrido: {elapsedStr}
+                              </span>
+                              <span className="font-mono font-bold text-emerald-400">
+                                Tarifa: S/ {(bed.fee || 0).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {isCleaning && (
+                          <div className="py-6 text-center space-y-2">
+                            <Sparkles className="h-10 w-10 text-cyan-500/40 mx-auto animate-pulse" />
+                            <p className="text-xs text-slate-400">
+                              Protocolo de recambio de sábanas y desinfección hospitalaria en curso.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Botones de Acción de Camilla */}
+                      <div className="pt-3 border-t border-slate-800">
+                        {isAvailable && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedBedForAdmit(bed);
+                                setAdmitPatientName('');
+                                setAdmitReason('');
+                                setAdmitProcedure('Nebulización continua y monitorización');
+                                setAdmitFee('45.00');
+                              }}
+                              className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md flex items-center justify-center gap-1.5 transition-all"
+                            >
+                              <PlusCircle className="h-3.5 w-3.5" />
+                              <span>Ingresar Paciente</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateBedStatus(bed.id, 'CLEANING')}
+                              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all"
+                              title="Poner en limpieza"
+                            >
+                              <Sparkles className="h-4 w-4 text-cyan-400" />
+                            </button>
+                          </div>
+                        )}
+
+                        {isOccupied && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedBedForDischarge(bed);
+                              setDischargePaid(bed.paid || true);
+                              setDischargeNextStatus('AVAILABLE');
+                            }}
+                            className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-md flex items-center justify-center gap-1.5 transition-all"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Dar de Alta & Liquidar</span>
+                          </button>
+                        )}
+
+                        {isCleaning && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBedStatus(bed.id, 'AVAILABLE')}
+                            className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white shadow-md flex items-center justify-center gap-1.5 transition-all"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            <span>Habilitar Camilla (Disponible)</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
         {/* PESTAÑA 6: MI PERFIL Y SEGURIDAD                               */}
         {/* ============================================================== */}
         {activeTab === 'profile' && (
@@ -4253,6 +5250,142 @@ function DashboardContent() {
                       </tfoot>
                     </table>
                   </div>
+                )}
+              </div>
+
+              {/* 2.2 Selector de Órdenes de Laboratorio e Imágenes Diagnósticas */}
+              <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                      <FlaskConical className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Órdenes de Laboratorio & Diagnóstico por Imágenes
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Selecciona los análisis o estudios requeridos para el paciente
+                      </p>
+                    </div>
+                  </div>
+                  {selectedLabItemIds.length > 0 && (
+                    <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20">
+                      {selectedLabItemIds.length} examen(es) seleccionados
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1 max-h-48 overflow-y-auto pr-1">
+                  {doctorLabCatalog.map((item) => {
+                    const isSelected = selectedLabItemIds.includes(item.id);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedLabItemIds((prev) =>
+                            isSelected ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+                          );
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all flex items-start justify-between gap-2 ${
+                          isSelected
+                            ? 'bg-cyan-950/40 border-cyan-500/50 text-white shadow-sm'
+                            : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-[10px] text-slate-400 px-1 py-0.2 rounded bg-slate-800">
+                              {item.code}
+                            </span>
+                            <span className="text-[10px] text-cyan-400 font-semibold">{item.category}</span>
+                          </div>
+                          <p className="text-xs font-bold text-white truncate mt-0.5">{item.name}</p>
+                          <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                            S/ {item.price.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className={`mt-0.5 h-4 w-4 rounded-md border flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-cyan-600 border-cyan-500 text-white' : 'border-slate-700 bg-slate-950'
+                        }`}>
+                          {isSelected && <Check className="h-3 w-3" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2.3 Certificado Oficial de Descanso Médico */}
+              <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <FileCheck className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Certificado Oficial de Descanso Médico
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Opcional: prescribe descanso e incapacidad temporal foliado
+                      </p>
+                    </div>
+                  </div>
+                  {recordRestDays > 0 && (
+                    <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                      {recordRestDays} días de descanso
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-300 block">
+                      Días de Reposo Físico
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={recordRestDays}
+                      onChange={(e) => setRecordRestDays(Math.max(0, parseInt(e.target.value) || 0))}
+                      placeholder="0 (sin descanso)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-300 block">
+                      Fecha de Inicio
+                    </label>
+                    <input
+                      type="date"
+                      value={recordRestStartDate}
+                      onChange={(e) => setRecordRestStartDate(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-slate-300 block">
+                      Código Diagnóstico CIE-10
+                    </label>
+                    <input
+                      type="text"
+                      value={recordCie10Code}
+                      onChange={(e) => setRecordCie10Code(e.target.value.toUpperCase())}
+                      placeholder="Ej. J00, K29.0, M54.5"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500 uppercase"
+                    />
+                  </div>
+                </div>
+
+                {recordRestDays > 0 && (
+                  <p className="text-[11px] text-emerald-400/90 italic bg-emerald-950/20 p-2 rounded-lg border border-emerald-900/30">
+                    ✓ Se generará un certificado médico oficial foliado válido para presentación laboral o educativa.
+                  </p>
                 )}
               </div>
 
@@ -5066,6 +6199,425 @@ function DashboardContent() {
                   className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950"
                 >
                   {replenishSubmitting ? 'Actualizando...' : 'Confirmar Reposición'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: REGISTRAR RESULTADO / INFORME DE LABORATORIO E IMÁGENES */}
+      {/* ============================================================== */}
+      {selectedOrderForResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-cyan-400">
+                  <FlaskConical className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">Registrar Resultado de Examen</h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    {selectedOrderForResult.catalogItem?.code} • {selectedOrderForResult.catalogItem?.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedOrderForResult(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {resultError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300">
+                {resultError}
+              </div>
+            )}
+
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
+              <p className="text-slate-400">
+                Paciente: <strong className="text-white">{selectedOrderForResult.patient.fullName}</strong>
+              </p>
+              <p className="text-slate-400">
+                Médico solicitante: <strong className="text-white">{selectedOrderForResult.doctor.user?.fullName}</strong>
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveLabResult} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Informe / Conclusiones del Diagnóstico *
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={resultSummaryText}
+                  onChange={(e) => setResultSummaryText(e.target.value)}
+                  placeholder="Valores obtenidos, observaciones clínicas, conclusiones diagnósticas..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-cyan-500 leading-relaxed font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Adjuntar Documento o Imagen (PDF, JPG, PNG - Opcional)
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="cursor-pointer px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-2 transition-all">
+                    <UploadCloud className="h-4 w-4 text-cyan-400" />
+                    <span>{resultFileName ? 'Cambiar Archivo' : 'Seleccionar Archivo'}</span>
+                    <input
+                      type="file"
+                      accept=".pdf,image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 5 * 1024 * 1024) {
+                          toast.error('El informe no puede superar los 5MB.');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setResultFileBase64(reader.result as string);
+                          setResultFileName(file.name);
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {resultFileName && (
+                    <div className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-950/30 px-2.5 py-1 rounded-lg border border-cyan-800/40">
+                      <FileText className="h-3.5 w-3.5" />
+                      <span className="truncate max-w-[200px]">{resultFileName}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResultFileBase64('');
+                          setResultFileName('');
+                        }}
+                        className="text-rose-400 hover:text-rose-300 ml-1"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderForResult(null)}
+                  className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={resultSubmitting}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-950"
+                >
+                  {resultSubmitting ? 'Guardando resultado...' : 'Guardar y Completar Informe'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: VER RESULTADO COMPLETO DEL EXAMEN                       */}
+      {/* ============================================================== */}
+      {viewResultModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">Informe de Laboratorio & Diagnóstico</h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    {viewResultModal.catalogItem?.code} • {viewResultModal.catalogItem?.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewResultModal(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs p-3 rounded-xl bg-slate-950 border border-slate-800">
+              <div>
+                <span className="text-slate-500">Paciente:</span>
+                <p className="font-bold text-white">{viewResultModal.patient.fullName}</p>
+              </div>
+              <div>
+                <span className="text-slate-500">Médico:</span>
+                <p className="font-bold text-white">{viewResultModal.doctor.user?.fullName}</p>
+              </div>
+              <div>
+                <span className="text-slate-500">Fecha de Orden:</span>
+                <p className="font-mono text-slate-300">
+                  {new Date(viewResultModal.createdAt).toLocaleDateString('es-ES')}
+                </p>
+              </div>
+              <div>
+                <span className="text-slate-500">Completado el:</span>
+                <p className="font-mono text-emerald-400 font-bold">
+                  {viewResultModal.completedAt ? new Date(viewResultModal.completedAt).toLocaleDateString('es-ES') : 'N/A'}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 block">
+                Resultado Clínico & Conclusiones
+              </span>
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 font-mono whitespace-pre-line leading-relaxed max-h-48 overflow-y-auto">
+                {viewResultModal.resultSummary || 'Sin resumen registrado.'}
+              </div>
+            </div>
+
+            {viewResultModal.resultFileBase64 && (
+              <div className="p-3 rounded-xl bg-cyan-950/20 border border-cyan-800/40 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <FileText className="h-4 w-4 text-cyan-400 shrink-0" />
+                  <span className="font-semibold text-white truncate max-w-[220px]">
+                    {viewResultModal.resultFileName || 'Informe_Adjunto.pdf'}
+                  </span>
+                </div>
+                <a
+                  href={viewResultModal.resultFileBase64}
+                  download={viewResultModal.resultFileName || 'Informe_Diagnostico.pdf'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white flex items-center gap-1.5 transition-all shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Descargar</span>
+                </a>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewResultModal(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-all"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: INGRESAR PACIENTE A CAMILLA DE TÓPICO / OBSERVACIÓN     */}
+      {/* ============================================================== */}
+      {selectedBedForAdmit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
+                  <BedDouble className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">Ingreso a Camilla de Tópico</h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    {selectedBedForAdmit.code} • {selectedBedForAdmit.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBedForAdmit(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {admitError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300">
+                {admitError}
+              </div>
+            )}
+
+            <form onSubmit={handleAdmitBed} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">Nombre del Paciente *</label>
+                <input
+                  type="text"
+                  required
+                  value={admitPatientName}
+                  onChange={(e) => setAdmitPatientName(e.target.value)}
+                  placeholder="Ej. Juan Pérez"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">Motivo de Ingreso a Tópico *</label>
+                <input
+                  type="text"
+                  required
+                  value={admitReason}
+                  onChange={(e) => setAdmitReason(e.target.value)}
+                  placeholder="Ej. Crisis asmática moderada, dolor abdominal agudo"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">Procedimiento / Tratamiento Inicial</label>
+                <input
+                  type="text"
+                  value={admitProcedure}
+                  onChange={(e) => setAdmitProcedure(e.target.value)}
+                  placeholder="Ej. Nebulización con Salbutamol, suero fisiológico IV"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">Tarifa por Uso de Camilla (S/) *</label>
+                <input
+                  type="number"
+                  step="0.50"
+                  min="0"
+                  required
+                  value={admitFee}
+                  onChange={(e) => setAdmitFee(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBedForAdmit(null)}
+                  className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={admitSubmitting}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950"
+                >
+                  {admitSubmitting ? 'Ingresando...' : 'Confirmar Ingreso a Camilla'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: DAR DE ALTA Y LIQUIDAR CAMILLA                          */}
+      {/* ============================================================== */}
+      {selectedBedForDischarge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">Alta & Liquidación de Camilla</h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    {selectedBedForDischarge.code} • {selectedBedForDischarge.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBedForDischarge(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+              <p className="text-slate-400">
+                Paciente: <strong className="text-white text-sm">{selectedBedForDischarge.currentPatientName}</strong>
+              </p>
+              {selectedBedForDischarge.reason && (
+                <p className="text-slate-400">
+                  Motivo: <span className="text-slate-200">{selectedBedForDischarge.reason}</span>
+                </p>
+              )}
+              {selectedBedForDischarge.procedure && (
+                <p className="text-slate-400">
+                  Procedimiento: <span className="text-slate-200">{selectedBedForDischarge.procedure}</span>
+                </p>
+              )}
+              <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+                <span className="font-semibold text-slate-300">Total a Liquidar:</span>
+                <span className="font-mono text-base font-black text-emerald-400">
+                  S/ {(selectedBedForDischarge.fee || 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleDischargeBed} className="space-y-4">
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dischargePaid}
+                    onChange={(e) => setDischargePaid(e.target.checked)}
+                    className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 bg-slate-950 h-4 w-4"
+                  />
+                  <span>Marcar tarifa como pagada en caja (S/ {(selectedBedForDischarge.fee || 0).toFixed(2)})</span>
+                </label>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Estado posterior de la camilla
+                </label>
+                <select
+                  value={dischargeNextStatus}
+                  onChange={(e) => setDischargeNextStatus(e.target.value as 'AVAILABLE' | 'CLEANING')}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                >
+                  <option value="AVAILABLE">Disponible inmediatamente</option>
+                  <option value="CLEANING">En Desinfección / Limpieza de protocolo</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBedForDischarge(null)}
+                  className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={dischargeSubmitting}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-950"
+                >
+                  {dischargeSubmitting ? 'Procesando alta...' : 'Confirmar Alta y Liberar Camilla'}
                 </button>
               </div>
             </form>

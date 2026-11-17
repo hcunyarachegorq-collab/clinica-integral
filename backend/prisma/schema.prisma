@@ -34,6 +34,18 @@ enum PaymentMethod {
   INSURANCE
 }
 
+enum LabOrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+}
+
 model User {
   id           String        @id @default(uuid())
   email        String        @unique
@@ -50,6 +62,7 @@ model User {
   medicalRecords MedicalRecord[] @relation("PatientRecords")
   notifications  Notification[]
   reviews        DoctorReview[]  @relation("PatientReviews")
+  labOrders      LabOrder[]      @relation("PatientLabOrders")
 
   @@map("users")
 }
@@ -80,6 +93,7 @@ model DoctorProfile {
   medicalRecords  MedicalRecord[]
   blockedDates    DoctorBlockedDate[]
   reviews         DoctorReview[]
+  labOrders       LabOrder[]          @relation("DoctorLabOrders")
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -157,8 +171,13 @@ model MedicalRecord {
   notes             String?
   pharmacyTotal     Float               @default(0)
   pharmacyPaid      Boolean             @default(false)
+  restDays          Int                 @default(0)
+  restStartDate     DateTime?
+  restEndDate       DateTime?
+  cie10Code         String?
   attachments       MedicalAttachment[]
   prescriptionItems PrescriptionItem[]
+  labOrders         LabOrder[]
   createdAt         DateTime            @default(now())
 
   @@map("medical_records")
@@ -246,4 +265,59 @@ model PrescriptionItem {
   createdAt       DateTime      @default(now())
 
   @@map("prescription_items")
+}
+
+model LabCatalogItem {
+  id        String     @id @default(uuid())
+  code      String     @unique // Ej: LAB-001, IMG-001
+  name      String
+  category  String     // "Laboratorio", "Imágenes", "Cardiología Diagnóstica"
+  price     Float
+  isActive  Boolean    @default(true)
+  orders    LabOrder[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("lab_catalog_items")
+}
+
+model LabOrder {
+  id               String          @id @default(uuid())
+  medicalRecordId  String?
+  medicalRecord    MedicalRecord?  @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  patientId        String
+  patient          User            @relation("PatientLabOrders", fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId         String
+  doctor           DoctorProfile   @relation("DoctorLabOrders", fields: [doctorId], references: [id], onDelete: Cascade)
+  catalogItemId    String
+  catalogItem      LabCatalogItem  @relation(fields: [catalogItemId], references: [id])
+  notes            String?
+  status           LabOrderStatus  @default(PENDING)
+  resultSummary    String?         @db.Text
+  resultFileBase64 String?         @db.Text
+  resultFileName   String?
+  price            Float
+  paid             Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  completedAt      DateTime?
+
+  @@map("lab_orders")
+}
+
+model ObservationBed {
+  id                 String    @id @default(uuid())
+  code               String    @unique // BOX-01 a BOX-06
+  name               String    // "Box 1 - Urgencias", "Camilla 2 - Observación"
+  status             BedStatus @default(AVAILABLE)
+  currentPatientId   String?
+  currentPatientName String?
+  reason             String?
+  procedure          String?   // "Nebulización continua", "Vía intravenosa", "Curación mayor"
+  fee                Float     @default(0)
+  paid               Boolean   @default(false)
+  admittedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("observation_beds")
 }

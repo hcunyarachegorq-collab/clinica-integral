@@ -174,6 +174,69 @@ export interface PrescriptionItem {
   medication?: Medication;
 }
 
+export type LabOrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+export type BedStatus = 'AVAILABLE' | 'OCCUPIED' | 'CLEANING';
+
+export interface LabCatalogItem {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  price: number;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface LabOrder {
+  id: string;
+  medicalRecordId?: string | null;
+  patientId: string;
+  doctorId: string;
+  catalogItemId: string;
+  notes?: string | null;
+  status: LabOrderStatus;
+  resultSummary?: string | null;
+  resultFileBase64?: string | null;
+  resultFileName?: string | null;
+  price: number;
+  paid: boolean;
+  createdAt: string;
+  completedAt?: string | null;
+  catalogItem: LabCatalogItem;
+  patient: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone?: string | null;
+  };
+  doctor: {
+    id: string;
+    user: { fullName: string };
+    specialty: { name: string };
+  };
+  medicalRecord?: {
+    id: string;
+    diagnosis: string;
+    createdAt: string;
+  } | null;
+}
+
+export interface ObservationBed {
+  id: string;
+  code: string;
+  name: string;
+  status: BedStatus;
+  currentPatientId?: string | null;
+  currentPatientName?: string | null;
+  reason?: string | null;
+  procedure?: string | null;
+  fee: number;
+  paid: boolean;
+  admittedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface MedicalRecord {
   id: string;
   appointmentId: string;
@@ -184,6 +247,10 @@ export interface MedicalRecord {
   notes?: string | null;
   pharmacyTotal?: number;
   pharmacyPaid?: boolean;
+  restDays?: number;
+  restStartDate?: string | null;
+  restEndDate?: string | null;
+  cie10Code?: string | null;
   createdAt: string;
   doctor: {
     id: string;
@@ -204,6 +271,7 @@ export interface MedicalRecord {
   };
   attachments?: MedicalAttachment[];
   prescriptionItems?: PrescriptionItem[];
+  labOrders?: LabOrder[];
 }
 
 export interface AvailableSlotsResponse {
@@ -540,6 +608,11 @@ class ApiService {
       quantity: number;
       dosage: string;
     }[];
+    labItemIds?: string[];
+    restDays?: number;
+    restStartDate?: string;
+    restEndDate?: string;
+    cie10Code?: string;
   }): Promise<{ message: string; medicalRecord: MedicalRecord }> {
     return this.request<{ message: string; medicalRecord: MedicalRecord }>('/api/medical-records', {
       method: 'POST',
@@ -723,6 +796,91 @@ class ApiService {
       totalCharged: number;
     }>(`/api/medical-records/${recordId}/dispense`, {
       method: 'PATCH',
+    });
+  }
+
+  // Órdenes de Laboratorio e Imágenes
+  async getLabCatalog(): Promise<{ count: number; items: LabCatalogItem[] }> {
+    return this.request<{ count: number; items: LabCatalogItem[] }>('/api/lab-orders/catalog', {
+      method: 'GET',
+    });
+  }
+
+  async getLabOrders(params?: { status?: string; search?: string }): Promise<{ count: number; orders: LabOrder[] }> {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.search) query.append('search', params.search);
+    const qs = query.toString();
+    return this.request<{ count: number; orders: LabOrder[] }>(`/api/lab-orders${qs ? `?${qs}` : ''}`, {
+      method: 'GET',
+    });
+  }
+
+  async payLabOrder(orderId: string): Promise<{ message: string; order: LabOrder }> {
+    return this.request<{ message: string; order: LabOrder }>(`/api/lab-orders/${orderId}/pay`, {
+      method: 'PATCH',
+    });
+  }
+
+  async saveLabOrderResult(
+    orderId: string,
+    data: { resultSummary: string; resultFileBase64?: string; resultFileName?: string }
+  ): Promise<{ message: string; order: LabOrder }> {
+    return this.request<{ message: string; order: LabOrder }>(`/api/lab-orders/${orderId}/result`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Tópico de Urgencias & Camillas de Observación
+  async getBeds(): Promise<{ count: number; beds: ObservationBed[] }> {
+    return this.request<{ count: number; beds: ObservationBed[] }>('/api/beds', {
+      method: 'GET',
+    });
+  }
+
+  async admitPatientToBed(
+    bedId: string,
+    data: {
+      currentPatientName: string;
+      currentPatientId?: string;
+      reason: string;
+      procedure?: string;
+      fee?: number;
+    }
+  ): Promise<{ message: string; bed: ObservationBed }> {
+    return this.request<{ message: string; bed: ObservationBed }>(`/api/beds/${bedId}/admit`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async dischargeBed(
+    bedId: string,
+    data?: { paid?: boolean; nextStatus?: 'AVAILABLE' | 'CLEANING' }
+  ): Promise<{
+    message: string;
+    bed: ObservationBed;
+    dischargedPatient?: string;
+    totalCharged?: number;
+    wasPaid?: boolean;
+  }> {
+    return this.request<{
+      message: string;
+      bed: ObservationBed;
+      dischargedPatient?: string;
+      totalCharged?: number;
+      wasPaid?: boolean;
+    }>(`/api/beds/${bedId}/discharge`, {
+      method: 'PATCH',
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  async updateBedStatus(bedId: string, status: BedStatus): Promise<{ message: string; bed: ObservationBed }> {
+    return this.request<{ message: string; bed: ObservationBed }>(`/api/beds/${bedId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
     });
   }
 }
