@@ -94,6 +94,9 @@ class Appointment {
   final String doctorSpecialty;
   final String? doctorLicenseNumber;
   final String? patientFullName;
+  final String? queueCode;
+  final String? consultingRoom;
+  final DateTime? calledAt;
   final Triage? triage;
   final AppointmentReview? review;
 
@@ -105,6 +108,9 @@ class Appointment {
     required this.status,
     required this.reason,
     this.notes,
+    this.queueCode,
+    this.consultingRoom,
+    this.calledAt,
     this.paymentStatus = 'UNPAID',
     this.paymentMethod,
     this.amountPaid,
@@ -172,6 +178,11 @@ class Appointment {
       status: json['status'] as String? ?? 'PENDING',
       reason: json['reason'] as String? ?? '',
       notes: json['notes'] as String?,
+      queueCode: json['queueCode'] as String?,
+      consultingRoom: json['consultingRoom'] as String?,
+      calledAt: json['calledAt'] != null
+          ? DateTime.tryParse(json['calledAt'].toString())
+          : null,
       paymentStatus: json['paymentStatus'] as String? ?? 'UNPAID',
       paymentMethod: json['paymentMethod'] as String?,
       amountPaid: (json['amountPaid'] as num?)?.toDouble(),

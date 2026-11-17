@@ -103,6 +103,9 @@ export interface Appointment {
   status: AppointmentStatus;
   reason: string;
   notes?: string | null;
+  queueCode?: string | null;
+  consultingRoom?: string | null;
+  calledAt?: string | null;
   paymentStatus: PaymentStatus;
   paymentMethod?: PaymentMethod | null;
   amountPaid?: number | null;
@@ -883,6 +886,171 @@ class ApiService {
       body: JSON.stringify({ status }),
     });
   }
+
+  // ==============================================================
+  // SALA DE ESPERA Y LLAMADO DE TURNOS (BLOQUE B)
+  // ==============================================================
+  async getWaitingRoom(): Promise<WaitingRoomData> {
+    return this.request<WaitingRoomData>('/api/public/waiting-room', {
+      method: 'GET',
+    });
+  }
+
+  async callAppointment(
+    id: string,
+    data?: { consultingRoom?: string }
+  ): Promise<{ message: string; appointment: any }> {
+    return this.request<{ message: string; appointment: any }>(`/api/appointments/${id}/call`, {
+      method: 'PATCH',
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  // ==============================================================
+  // CAJA CENTRAL Y LIQUIDACIÓN UNIFICADA (BLOQUE B)
+  // ==============================================================
+  async getPatientPendingBilling(patientId: string): Promise<PatientPendingBilling> {
+    return this.request<PatientPendingBilling>(`/api/billing/patient/${patientId}/pending`, {
+      method: 'GET',
+    });
+  }
+
+  async settlePatientBilling(
+    patientId: string,
+    data: {
+      paymentMethod: 'EFECTIVO' | 'YAPE_PLIN' | 'TARJETA' | 'TRANSFERENCIA';
+      appointmentIds?: string[];
+      medicalRecordIds?: string[];
+      labOrderIds?: string[];
+      bedIds?: string[];
+    }
+  ): Promise<{ message: string; receipt: UnifiedReceipt }> {
+    return this.request<{ message: string; receipt: UnifiedReceipt }>(`/api/billing/patient/${patientId}/settle`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getDailyCashClose(date?: string): Promise<DailyCashClose> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    return this.request<DailyCashClose>(`/api/billing/daily-close${query}`, {
+      method: 'GET',
+    });
+  }
+}
+
+// Interfaces de Sala de Espera y Caja
+export interface WaitingRoomItem {
+  id: string;
+  queueCode: string;
+  patientName: string;
+  doctorName: string;
+  specialty: string;
+  consultingRoom: string;
+  status: string;
+  calledAt?: string | null;
+  scheduledAt?: string | null;
+}
+
+export interface WaitingRoomData {
+  timestamp: string;
+  stats: {
+    calledCount: number;
+    waitingCount: number;
+  };
+  called: WaitingRoomItem[];
+  waiting: WaitingRoomItem[];
+}
+
+export interface BillingPendingItem {
+  type: 'CONSULTATION' | 'PHARMACY' | 'LAB_ORDER' | 'TOPIC_BED';
+  id: string;
+  categoryName: string;
+  description: string;
+  amount: number;
+  detail?: any;
+}
+
+export interface PatientPendingBilling {
+  patient: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone?: string | null;
+  };
+  subtotals: {
+    consultations: number;
+    pharmacy: number;
+    lab: number;
+    topic: number;
+  };
+  grandTotal: number;
+  itemsCount: number;
+  items: BillingPendingItem[];
+  counts: {
+    appointments: number;
+    prescriptions: number;
+    labOrders: number;
+    beds: number;
+  };
+}
+
+export interface UnifiedReceipt {
+  id: string;
+  receiptNumber: string;
+  date: string;
+  patient: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone?: string | null;
+  };
+  cashier: string;
+  paymentMethod: string;
+  items: Array<{
+    type: string;
+    id: string;
+    description: string;
+    amount: number;
+  }>;
+  subtotals: {
+    consultations: number;
+    pharmacy: number;
+    lab: number;
+    topic: number;
+  };
+  grandTotal: number;
+}
+
+export interface DailyCashClose {
+  date: string;
+  receiptsCount: number;
+  grandTotal: number;
+  byArea: {
+    consultations: number;
+    pharmacy: number;
+    lab: number;
+    topic: number;
+  };
+  byPaymentMethod: {
+    EFECTIVO: number;
+    YAPE_PLIN: number;
+    TARJETA: number;
+    TRANSFERENCIA: number;
+  };
+  receipts: Array<{
+    id: string;
+    receiptNumber: string;
+    patientName: string;
+    cashierName?: string;
+    paymentMethod: string;
+    totalAmount: number;
+    consultationTotal: number;
+    pharmacyTotal: number;
+    labTotal: number;
+    topicTotal: number;
+    createdAt: string;
+  }>;
 }
 
 export const api = new ApiService();

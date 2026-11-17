@@ -56,6 +56,7 @@ import {
   BedDouble,
   FileCheck,
   Timer,
+  Tv,
 } from 'lucide-react';
 import {
   api,
@@ -80,6 +81,9 @@ import {
   LabOrderStatus,
   ObservationBed,
   BedStatus,
+  DailyCashClose,
+  PatientPendingBilling,
+  UnifiedReceipt,
 } from '../../src/lib/api';
 import { useAuth } from '../../src/context/AuthContext';
 import { useToast } from '../../src/context/ToastContext';
@@ -122,8 +126,8 @@ function DashboardContent() {
     return days;
   }, [weekOffset]);
 
-  // Pestañas activas: 'appointments', 'records', 'patients', 'lab_orders', 'observation_beds', 'blocked_dates', 'analytics', 'admin_management', 'pharmacy', 'profile'
-  const [activeTab, setActiveTab] = useState<'appointments' | 'records' | 'patients' | 'lab_orders' | 'observation_beds' | 'blocked_dates' | 'analytics' | 'admin_management' | 'pharmacy' | 'profile'>('appointments');
+  // Pestañas activas: 'appointments', 'records', 'patients', 'lab_orders', 'observation_beds', 'blocked_dates', 'analytics', 'admin_management', 'pharmacy', 'billing', 'profile'
+  const [activeTab, setActiveTab] = useState<'appointments' | 'records' | 'patients' | 'lab_orders' | 'observation_beds' | 'blocked_dates' | 'analytics' | 'admin_management' | 'pharmacy' | 'billing' | 'profile'>('appointments');
 
   // Estados para Laboratorio e Imágenes Diagnósticas
   const [labCatalog, setLabCatalog] = useState<LabCatalogItem[]>([]);
@@ -257,6 +261,17 @@ function DashboardContent() {
   const [uploadingAttachment, setUploadingAttachment] = useState<boolean>(false);
   const [uploadAttachmentError, setUploadAttachmentError] = useState<string | null>(null);
   const [viewAttachmentModal, setViewAttachmentModal] = useState<MedicalAttachment | null>(null);
+
+  // Estados para Caja Unificada y Arqueo Diario (Bloque B)
+  const [dailyClose, setDailyClose] = useState<DailyCashClose | null>(null);
+  const [loadingDailyClose, setLoadingDailyClose] = useState<boolean>(false);
+  const [selectedPatientForBilling, setSelectedPatientForBilling] = useState<string>('');
+  const [patientPendingBilling, setPatientPendingBilling] = useState<PatientPendingBilling | null>(null);
+  const [loadingPendingBilling, setLoadingPendingBilling] = useState<boolean>(false);
+  const [settlePaymentMethod, setSettlePaymentMethod] = useState<'EFECTIVO' | 'YAPE_PLIN' | 'TARJETA' | 'TRANSFERENCIA'>('EFECTIVO');
+  const [settlingBilling, setSettlingBilling] = useState<boolean>(false);
+  const [issuedReceipt, setIssuedReceipt] = useState<UnifiedReceipt | null>(null);
+  const [callingAppId, setCallingAppId] = useState<string | null>(null);
 
   // Estados para Notificaciones
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -545,6 +560,85 @@ function DashboardContent() {
       return () => clearInterval(interval);
     }
   }, [activeTab, loadBeds]);
+
+  // Caja Unificada y Arqueo Diario (Bloque B)
+  const loadDailyClose = useCallback(async (date?: string) => {
+    setLoadingDailyClose(true);
+    try {
+      const res = await api.getDailyCashClose(date);
+      setDailyClose(res);
+    } catch (err: any) {
+      console.error('Error al cargar arqueo de caja:', err);
+    } finally {
+      setLoadingDailyClose(false);
+    }
+  }, []);
+
+  const loadPatientPendingBilling = useCallback(async (patientId: string) => {
+    if (!patientId) {
+      setPatientPendingBilling(null);
+      return;
+    }
+    setLoadingPendingBilling(true);
+    try {
+      const res = await api.getPatientPendingBilling(patientId);
+      setPatientPendingBilling(res);
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al cargar estado de cuenta del paciente');
+      setPatientPendingBilling(null);
+    } finally {
+      setLoadingPendingBilling(false);
+    }
+  }, [toast]);
+
+  const handleSettleBilling = async () => {
+    if (!selectedPatientForBilling || !patientPendingBilling) return;
+    if (patientPendingBilling.grandTotal <= 0) {
+      toast.error('El paciente no tiene cargos pendientes por liquidar.');
+      return;
+    }
+    setSettlingBilling(true);
+    try {
+      const res = await api.settlePatientBilling(selectedPatientForBilling, {
+        paymentMethod: settlePaymentMethod,
+      });
+      toast.success(res.message);
+      setIssuedReceipt(res.receipt);
+      await loadPatientPendingBilling(selectedPatientForBilling);
+      await loadDailyClose();
+      loadDashboardData();
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al liquidar cargos de caja');
+    } finally {
+      setSettlingBilling(false);
+    }
+  };
+
+  const handleCallAppointment = async (app: Appointment) => {
+    setCallingAppId(app.id);
+    try {
+      const res = await api.callAppointment(app.id, { consultingRoom: app.consultingRoom || undefined });
+      toast.success(`Llamando a ${app.patient.fullName} a ${res.appointment.consultingRoom}. Turno: ${res.appointment.queueCode}. Proyectado en Sala de Espera TV.`);
+      setAppointments((prev) =>
+        prev.map((a) =>
+          a.id === app.id
+            ? { ...a, calledAt: res.appointment.calledAt, queueCode: res.appointment.queueCode, consultingRoom: res.appointment.consultingRoom }
+            : a
+        )
+      );
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al llamar al paciente a consultorio');
+    } finally {
+      setCallingAppId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'billing') {
+      loadDailyClose();
+      loadPatients('');
+    }
+  }, [activeTab, loadDailyClose, loadPatients]);
 
   // Slots para agendamiento desde Directorio de Pacientes (Admin/Recepción)
   useEffect(() => {
@@ -1912,64 +2006,69 @@ function DashboardContent() {
           </div>
 
           {/* Navegación por pestañas */}
-          <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800 self-start lg:self-auto overflow-x-auto">
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-950/90 p-1.5 rounded-2xl border border-slate-800 self-start lg:self-auto max-w-full no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <button
               onClick={() => setActiveTab('appointments')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 activeTab === 'appointments'
                   ? 'bg-teal-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
               <Calendar className="h-3.5 w-3.5" />
-              <span>{user.role === 'PATIENT' ? 'Mis Citas' : 'Citas & Triaje'}</span>
+              <span>{user.role === 'PATIENT' ? 'Mis Citas' : 'Citas'}</span>
             </button>
 
             <button
               onClick={() => setActiveTab('records')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 activeTab === 'records'
                   ? 'bg-teal-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
               <ClipboardList className="h-3.5 w-3.5" />
-              <span>Historial ({medicalRecords.length})</span>
+              <span>Historial</span>
+              {medicalRecords.length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800/80 text-slate-300 font-mono">
+                  {medicalRecords.length}
+                </span>
+              )}
             </button>
 
-            {/* Pestaña Laboratorio & Imágenes (Todos) */}
+            {/* Pestaña Laboratorio */}
             <button
               onClick={() => setActiveTab('lab_orders')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 activeTab === 'lab_orders'
                   ? 'bg-cyan-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
               <FlaskConical className="h-3.5 w-3.5" />
-              <span>Laboratorio & Imágenes</span>
+              <span>Laboratorio</span>
             </button>
 
-            {/* Pestaña Tópico & Camillas (ADMIN, DOCTOR, RECEPTIONIST) */}
+            {/* Pestaña Tópico */}
             {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
               <button
                 onClick={() => setActiveTab('observation_beds')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   activeTab === 'observation_beds'
                     ? 'bg-indigo-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white hover:bg-slate-900'
                 }`}
               >
                 <BedDouble className="h-3.5 w-3.5" />
-                <span>Tópico & Camillas</span>
+                <span>Tópico</span>
               </button>
             )}
 
-            {/* Pestaña Pacientes (ADMIN, DOCTOR, RECEPTIONIST) */}
+            {/* Pestaña Pacientes */}
             {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
               <button
                 onClick={() => setActiveTab('patients')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   activeTab === 'patients'
                     ? 'bg-teal-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -1980,18 +2079,18 @@ function DashboardContent() {
               </button>
             )}
 
-            {/* Pestaña Días No Laborables (DOCTOR y ADMIN) */}
+            {/* Pestaña Bloqueos */}
             {(user.role === 'DOCTOR' || user.role === 'ADMIN') && (
               <button
                 onClick={() => setActiveTab('blocked_dates')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   activeTab === 'blocked_dates'
                     ? 'bg-amber-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white hover:bg-slate-900'
                 }`}
               >
                 <CalendarOff className="h-3.5 w-3.5" />
-                <span>Días No Laborables</span>
+                <span>Bloqueos</span>
               </button>
             )}
 
@@ -1999,59 +2098,89 @@ function DashboardContent() {
               <>
                 <button
                   onClick={() => setActiveTab('analytics')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                     activeTab === 'analytics'
                       ? 'bg-teal-600 text-white shadow-md'
                       : 'text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                 >
                   <TrendingUp className="h-3.5 w-3.5" />
-                  <span>Analítica & Finanzas</span>
+                  <span>Analítica</span>
                 </button>
 
                 <button
                   onClick={() => setActiveTab('admin_management')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                     activeTab === 'admin_management'
                       ? 'bg-purple-600 text-white shadow-md'
                       : 'text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                 >
                   <Briefcase className="h-3.5 w-3.5" />
-                  <span>Gestión Clínica</span>
+                  <span>Gestión</span>
                 </button>
 
                 <button
                   onClick={() => setActiveTab('pharmacy')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                     activeTab === 'pharmacy'
                       ? 'bg-emerald-600 text-white shadow-md'
                       : 'text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                 >
                   <Pill className="h-3.5 w-3.5" />
-                  <span>Botica & Stock</span>
+                  <span>Botica</span>
                 </button>
               </>
             )}
 
-            {/* Pestaña Mi Perfil y Seguridad (Todos) */}
+            {/* Pestaña Caja Unificada (ADMIN y RECEPTIONIST) */}
+            {(user.role === 'ADMIN' || user.role === 'RECEPTIONIST') && (
+              <button
+                onClick={() => {
+                  setActiveTab('billing');
+                  loadDailyClose();
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  activeTab === 'billing'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <DollarSign className="h-3.5 w-3.5" />
+                <span>Caja</span>
+              </button>
+            )}
+
+            {/* Pestaña Mi Perfil */}
             <button
               onClick={() => setActiveTab('profile')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 activeTab === 'profile'
                   ? 'bg-teal-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
               <UserCheck className="h-3.5 w-3.5" />
-              <span>Mi Perfil</span>
+              <span>Perfil</span>
             </button>
+
+            {/* Acceso Directo a Sala de Espera TV */}
+            <a
+              href="/sala-espera"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-slate-400 hover:text-cyan-300 hover:bg-slate-900 border border-slate-800/80 transition-all"
+              title="Abrir Sala de Espera TV en pestaña nueva"
+            >
+              <Tv className="h-3.5 w-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Sala TV</span>
+            </a>
 
             <button
               onClick={loadDashboardData}
               disabled={loadingData}
-              className="p-2 text-slate-400 hover:text-teal-400 hover:bg-slate-900 rounded-lg transition-all"
+              className="p-1.5 text-slate-400 hover:text-teal-400 hover:bg-slate-900 rounded-xl transition-all"
               title="Refrescar"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loadingData ? 'animate-spin' : ''}`} />
@@ -2271,6 +2400,24 @@ function DashboardContent() {
                                   {scheduledDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}{' '}
                                   • {scheduledDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                 </p>
+                                {app.queueCode && (
+                                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                    <span className="text-xs font-mono font-black text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-0.5 rounded-lg flex items-center gap-1.5">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                                      Turno: {app.queueCode}
+                                    </span>
+                                    {app.consultingRoom && (
+                                      <span className="text-xs font-semibold text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
+                                        {app.consultingRoom}
+                                      </span>
+                                    )}
+                                    {app.calledAt && (
+                                      <span className="text-[11px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 rounded-lg animate-pulse">
+                                        ¡Llamando ahora! Pase al consultorio
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                               <div className="flex flex-col items-end gap-1.5">
                                 {getStatusBadge(app.status)}
@@ -2675,6 +2822,17 @@ function DashboardContent() {
                                 <span className="text-xs font-mono font-bold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 rounded">
                                   {date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })} • {date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                 </span>
+                                {app.queueCode && (
+                                  <span className="text-xs font-mono font-black text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+                                    Turno: {app.queueCode}
+                                  </span>
+                                )}
+                                {app.consultingRoom && (
+                                  <span className="text-xs font-mono text-slate-300 bg-slate-800/80 border border-slate-700/80 px-2 py-0.5 rounded">
+                                    {app.consultingRoom}
+                                  </span>
+                                )}
                                 {getStatusBadge(app.status)}
                                 {getPaymentBadge(app.paymentStatus, app.paymentMethod)}
                               </div>
@@ -2755,6 +2913,24 @@ function DashboardContent() {
                                 >
                                   <Receipt className="h-3.5 w-3.5 text-emerald-400" />
                                   <span>Recibo</span>
+                                </button>
+                              )}
+
+                              {/* Botón Llamar Turno (Doctor / Admin) */}
+                              {(user.role === 'DOCTOR' || user.role === 'ADMIN') && app.status === 'CONFIRMED' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCallAppointment(app)}
+                                  disabled={callingAppId === app.id}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                    app.calledAt
+                                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30'
+                                      : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-md shadow-cyan-950'
+                                  }`}
+                                  title="Llamar al paciente por altavoz y sala de espera"
+                                >
+                                  <Tv className="h-3.5 w-3.5" />
+                                  <span>{callingAppId === app.id ? 'Llamando...' : app.calledAt ? 'Volver a Llamar' : 'Llamar Turno'}</span>
                                 </button>
                               )}
 
@@ -4579,6 +4755,464 @@ function DashboardContent() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* PESTAÑA: CAJA UNIFICADA Y ARQUEO DIARIO (BLOQUE B)             */}
+        {/* ============================================================== */}
+        {activeTab === 'billing' && (user.role === 'ADMIN' || user.role === 'RECEPTIONIST') && (
+          <div className="space-y-8">
+            {/* Cabecera de Caja */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+              <div>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <DollarSign className="h-6 w-6 text-emerald-400" />
+                  Caja Central & Liquidación Unificada
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Arqueo de ingresos en tiempo real, liquidación hospitalaria integral (Consultas, Botica, Laboratorio y Tópico) y emisión de boletas oficiales.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <a
+                  href="/sala-espera"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 flex items-center gap-1.5 transition-all shadow-sm"
+                >
+                  <Tv className="h-4 w-4 text-cyan-400" />
+                  <span>Pantalla Sala de Espera TV</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    loadDailyClose();
+                    if (selectedPatientForBilling) loadPatientPendingBilling(selectedPatientForBilling);
+                  }}
+                  disabled={loadingDailyClose}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 flex items-center gap-1.5 transition-all"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 text-emerald-400 ${loadingDailyClose ? 'animate-spin' : ''}`} />
+                  <span>Actualizar Arqueo</span>
+                </button>
+              </div>
+            </div>
+
+            {/* SECCIÓN 1: ARQUEO DE CAJA DEL DÍA */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Activity className="h-4 w-4 text-emerald-400" />
+                  Arqueo de Ingresos del Día ({dailyClose?.date || new Date().toISOString().split('T')[0]})
+                </span>
+                <span className="text-xs font-mono text-slate-400">
+                  {dailyClose?.receiptsCount || 0} comprobantes emitidos
+                </span>
+              </div>
+
+              {/* 5 KPIs de Arqueo */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+                {/* Gran Total */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 border-2 border-emerald-500/40 space-y-1 shadow-lg shadow-emerald-950/20 col-span-2 sm:col-span-1">
+                  <span className="text-[11px] font-bold uppercase text-emerald-400 block tracking-wider">
+                    Total Recaudado Hoy
+                  </span>
+                  <p className="text-2xl font-black text-white font-mono">
+                    S/ {(dailyClose?.grandTotal || 0).toFixed(2)}
+                  </p>
+                  <span className="text-[10px] text-slate-400 block">Cierre consolidado en vivo</span>
+                </div>
+
+                {/* Consultas */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                    <Stethoscope className="h-3.5 w-3.5 text-teal-400" /> Consultas
+                  </span>
+                  <p className="text-xl font-bold text-teal-300 font-mono">
+                    S/ {(dailyClose?.byArea.consultations || 0).toFixed(2)}
+                  </p>
+                  <span className="text-[10px] text-slate-500 block">Atenciones médicas</span>
+                </div>
+
+                {/* Botica */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                    <Pill className="h-3.5 w-3.5 text-emerald-400" /> Botica Interna
+                  </span>
+                  <p className="text-xl font-bold text-emerald-300 font-mono">
+                    S/ {(dailyClose?.byArea.pharmacy || 0).toFixed(2)}
+                  </p>
+                  <span className="text-[10px] text-slate-500 block">Fármacos dispensados</span>
+                </div>
+
+                {/* Laboratorio */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                    <FlaskConical className="h-3.5 w-3.5 text-cyan-400" /> Laboratorio
+                  </span>
+                  <p className="text-xl font-bold text-cyan-300 font-mono">
+                    S/ {(dailyClose?.byArea.lab || 0).toFixed(2)}
+                  </p>
+                  <span className="text-[10px] text-slate-500 block">Análisis e imágenes</span>
+                </div>
+
+                {/* Tópico */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                    <BedDouble className="h-3.5 w-3.5 text-indigo-400" /> Tópico & Camillas
+                  </span>
+                  <p className="text-xl font-bold text-indigo-300 font-mono">
+                    S/ {(dailyClose?.byArea.topic || 0).toFixed(2)}
+                  </p>
+                  <span className="text-[10px] text-slate-500 block">Urgencias y estancia</span>
+                </div>
+              </div>
+
+              {/* Desglose por Método de Pago */}
+              <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <span className="font-bold text-slate-400 uppercase tracking-wider text-[11px]">
+                  Por Método de Pago:
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 font-mono font-semibold">
+                    💵 Efectivo: <strong className="text-white">S/ {(dailyClose?.byPaymentMethod.EFECTIVO || 0).toFixed(2)}</strong>
+                  </span>
+                  <span className="px-3 py-1 rounded-xl bg-purple-950/40 border border-purple-800/40 text-purple-300 font-mono font-semibold">
+                    📱 Yape / Plin: <strong className="text-white">S/ {(dailyClose?.byPaymentMethod.YAPE_PLIN || 0).toFixed(2)}</strong>
+                  </span>
+                  <span className="px-3 py-1 rounded-xl bg-blue-950/40 border border-blue-800/40 text-blue-300 font-mono font-semibold">
+                    💳 Tarjeta: <strong className="text-white">S/ {(dailyClose?.byPaymentMethod.TARJETA || 0).toFixed(2)}</strong>
+                  </span>
+                  <span className="px-3 py-1 rounded-xl bg-teal-950/40 border border-teal-800/40 text-teal-300 font-mono font-semibold">
+                    🏦 Transferencia: <strong className="text-white">S/ {(dailyClose?.byPaymentMethod.TRANSFERENCIA || 0).toFixed(2)}</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: LIQUIDACIÓN UNIFICADA DE CARGOS POR PACIENTE */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Columna Izquierda (5 cols): Buscador y Selección de Paciente */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                      <Users className="h-4 w-4 text-teal-400" />
+                      1. Seleccionar Paciente
+                    </h4>
+                    <span className="text-[11px] text-slate-400">
+                      {patientsList.length} registrados
+                    </span>
+                  </div>
+
+                  {/* Input de Búsqueda Rápida */}
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por nombre, DNI o email..."
+                      value={patientSearchQuery}
+                      onChange={(e) => {
+                        setPatientSearchQuery(e.target.value);
+                        loadPatients(e.target.value);
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+
+                  {/* Lista de Selección de Pacientes */}
+                  <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1 no-scrollbar">
+                    {loadingPatients ? (
+                      <div className="p-6 text-center text-xs text-slate-400">
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-teal-400" />
+                        Buscando pacientes...
+                      </div>
+                    ) : patientsList.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-slate-400">
+                        No se encontraron pacientes con ese criterio.
+                      </div>
+                    ) : (
+                      patientsList.map((p) => {
+                        const isSelected = selectedPatientForBilling === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPatientForBilling(p.id);
+                              loadPatientPendingBilling(p.id);
+                            }}
+                            className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                              isSelected
+                                ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-md'
+                                : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700 text-slate-300'
+                            }`}
+                          >
+                            <div className="space-y-0.5 truncate">
+                              <span className="font-bold text-xs block text-white truncate">{p.fullName}</span>
+                              <span className="text-[11px] text-slate-400 block truncate">{p.email}</span>
+                            </div>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 shrink-0">
+                              {isSelected ? 'Seleccionado ✓' : 'Elegir'}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Columna Derecha (7 cols): Estado de Cuenta Consolidado y Liquidación */}
+              <div className="lg:col-span-7 space-y-4">
+                {selectedPatientForBilling && patientPendingBilling ? (
+                  <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-6">
+                    {/* Encabezado del Paciente */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+                      <div>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-0.5">
+                          Estado de Cuenta Consolidado
+                        </span>
+                        <h4 className="text-lg font-extrabold text-white">
+                          {patientPendingBilling.patient.fullName}
+                        </h4>
+                        <p className="text-xs text-slate-400">
+                          {patientPendingBilling.patient.email} {patientPendingBilling.patient.phone ? `• Tel: ${patientPendingBilling.patient.phone}` : ''}
+                        </p>
+                      </div>
+
+                      <div className="text-right sm:text-right bg-slate-950 p-3 rounded-xl border border-slate-800">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Total Pendiente:
+                        </span>
+                        <span className="text-2xl font-black text-emerald-400 font-mono">
+                          S/ {patientPendingBilling.grandTotal.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Desglose de Ítems Pendientes */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Conceptos Pendientes de Pago ({patientPendingBilling.itemsCount})
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {patientPendingBilling.counts.appointments} consultas • {patientPendingBilling.counts.prescriptions} recetas • {patientPendingBilling.counts.labOrders} lab • {patientPendingBilling.counts.beds} tópico
+                        </span>
+                      </div>
+
+                      {patientPendingBilling.items.length === 0 ? (
+                        <div className="p-8 text-center rounded-2xl bg-slate-950/60 border border-slate-800 text-slate-400 space-y-2">
+                          <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
+                          <p className="text-sm font-bold text-white">¡Cuenta al día!</p>
+                          <p className="text-xs text-slate-400">Este paciente no tiene cargos pendientes por liquidar.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
+                          {patientPendingBilling.items.map((item, idx) => (
+                            <div
+                              key={item.id + idx}
+                              className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800/80 flex items-center justify-between gap-3 text-xs"
+                            >
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                      item.type === 'CONSULTATION'
+                                        ? 'bg-teal-500/10 text-teal-300 border border-teal-500/20'
+                                        : item.type === 'PHARMACY'
+                                        ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                                        : item.type === 'LAB_ORDER'
+                                        ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/20'
+                                        : 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20'
+                                    }`}
+                                  >
+                                    {item.categoryName}
+                                  </span>
+                                </div>
+                                <p className="font-semibold text-slate-200">{item.description}</p>
+                              </div>
+                              <span className="font-mono font-extrabold text-sm text-white shrink-0">
+                                S/ {item.amount.toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Subtotales y Selección de Medio de Pago */}
+                    {patientPendingBilling.items.length > 0 && (
+                      <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pb-3 border-b border-slate-800">
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Consultas:</span>
+                            <span className="font-mono font-bold text-slate-300">
+                              S/ {patientPendingBilling.subtotals.consultations.toFixed(2)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Botica:</span>
+                            <span className="font-mono font-bold text-slate-300">
+                              S/ {patientPendingBilling.subtotals.pharmacy.toFixed(2)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Laboratorio:</span>
+                            <span className="font-mono font-bold text-slate-300">
+                              S/ {patientPendingBilling.subtotals.lab.toFixed(2)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Tópico:</span>
+                            <span className="font-mono font-bold text-slate-300">
+                              S/ {patientPendingBilling.subtotals.topic.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Selector de Método de Pago */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-300 block">
+                            Seleccionar Método de Pago:
+                          </label>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {(['EFECTIVO', 'YAPE_PLIN', 'TARJETA', 'TRANSFERENCIA'] as const).map((m) => {
+                              const isSelected = settlePaymentMethod === m;
+                              const label = m === 'EFECTIVO' ? 'Efectivo' : m === 'YAPE_PLIN' ? 'Yape / Plin' : m === 'TARJETA' ? 'Tarjeta' : 'Transferencia';
+                              return (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => setSettlePaymentMethod(m)}
+                                  className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all border text-center ${
+                                    isSelected
+                                      ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
+                                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Botón de Cobro y Liquidación */}
+                        <button
+                          type="button"
+                          onClick={handleSettleBilling}
+                          disabled={settlingBilling || patientPendingBilling.grandTotal <= 0}
+                          className="w-full py-3 px-4 rounded-xl font-extrabold text-sm bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-xl shadow-emerald-950 flex items-center justify-center gap-2 transition-all"
+                        >
+                          {settlingBilling ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Procesando Liquidación de Caja...</span>
+                            </>
+                          ) : (
+                            <>
+                              <DollarSign className="h-4 w-4" />
+                              <span>Liquidar Cuenta Total: S/ {patientPendingBilling.grandTotal.toFixed(2)}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800 space-y-3">
+                    <Receipt className="h-12 w-12 text-slate-700 mx-auto" />
+                    <div className="space-y-1 max-w-sm mx-auto">
+                      <h4 className="font-bold text-slate-300 text-base">Seleccione un Paciente</h4>
+                      <p className="text-xs text-slate-400">
+                        Elija un paciente en la columna izquierda para inspeccionar sus consultas, recetas, exámenes y estadías pendientes de pago.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SECCIÓN 3: BOLETAS EMITIDAS DEL DÍA */}
+            {dailyClose && dailyClose.receipts && dailyClose.receipts.length > 0 && (
+              <div className="space-y-4 pt-4 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                    <Receipt className="h-4 w-4 text-emerald-400" />
+                    Boletas Hospitalarias Emitidas Hoy ({dailyClose.receipts.length})
+                  </h4>
+                  <span className="text-xs text-slate-400">
+                    Historial del día en curso
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {dailyClose.receipts.map((r) => (
+                    <div
+                      key={r.id}
+                      className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 flex flex-col justify-between space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-black text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                          {r.receiptNumber}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {new Date(r.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+
+                      <div>
+                        <p className="font-bold text-white text-xs truncate">{r.patientName}</p>
+                        <p className="text-[11px] text-slate-400">
+                          Método: <strong className="text-slate-300">{r.paymentMethod}</strong> • Cajero: {r.cashierName || 'Caja Central'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+                        <span className="font-mono font-extrabold text-white text-sm">
+                          S/ {r.totalAmount.toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIssuedReceipt({
+                              id: r.id,
+                              receiptNumber: r.receiptNumber,
+                              date: r.createdAt,
+                              patient: { id: '', fullName: r.patientName, email: '' },
+                              cashier: r.cashierName || 'Caja Central',
+                              paymentMethod: r.paymentMethod,
+                              items: [
+                                ...(r.consultationTotal > 0 ? [{ type: 'CONSULTATION', id: '1', description: 'Consultas Médicas', amount: r.consultationTotal }] : []),
+                                ...(r.pharmacyTotal > 0 ? [{ type: 'PHARMACY', id: '2', description: 'Botica Interna y Fármacos', amount: r.pharmacyTotal }] : []),
+                                ...(r.labTotal > 0 ? [{ type: 'LAB_ORDER', id: '3', description: 'Exámenes de Laboratorio', amount: r.labTotal }] : []),
+                                ...(r.topicTotal > 0 ? [{ type: 'TOPIC_BED', id: '4', description: 'Tópico y Procedimientos', amount: r.topicTotal }] : []),
+                              ],
+                              subtotals: {
+                                consultations: r.consultationTotal,
+                                pharmacy: r.pharmacyTotal,
+                                lab: r.labTotal,
+                                topic: r.topicTotal,
+                              },
+                              grandTotal: r.totalAmount,
+                            });
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-all"
+                        >
+                          <Printer className="h-3 w-3 text-emerald-400" />
+                          <span>Ver / Imprimir</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -6621,6 +7255,125 @@ function DashboardContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: BOLETA HOSPITALARIA UNIFICADA (BOL-2026-XXXX) */}
+      {issuedReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6 relative print:border-none print:shadow-none print:bg-white print:text-black print:p-0">
+            {/* Cabecera del Comprobante */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-800 print:border-slate-300">
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400 font-extrabold print:text-emerald-700">
+                  Comprobante Electrónico Oficial
+                </span>
+                <h3 className="text-xl font-black text-white print:text-black">CLÍNICA INTEGRAL S.A.C.</h3>
+                <p className="text-xs text-slate-400 print:text-slate-600">RUC: 20608945123 • Av. San Martín 450, Lima</p>
+                <p className="text-xs text-slate-400 print:text-slate-600">Central Telefónica: (01) 500-6000 • contacto@clinica.com</p>
+              </div>
+
+              <div className="text-right p-3 rounded-2xl bg-slate-950 border border-slate-800 print:bg-slate-100 print:border-slate-300">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 print:text-slate-600 block">
+                  Boleta de Venta
+                </span>
+                <span className="font-mono text-base font-black text-emerald-400 print:text-emerald-700 block">
+                  {issuedReceipt.receiptNumber}
+                </span>
+              </div>
+            </div>
+
+            {/* Datos del Paciente y Transacción */}
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80 print:bg-slate-50 print:border-slate-200">
+              <div>
+                <span className="text-slate-400 print:text-slate-500 block text-[11px]">Paciente:</span>
+                <strong className="text-white print:text-black text-sm">{issuedReceipt.patient.fullName}</strong>
+                {issuedReceipt.patient.email && (
+                  <span className="text-slate-400 print:text-slate-600 block text-[11px] truncate">
+                    {issuedReceipt.patient.email}
+                  </span>
+                )}
+              </div>
+              <div className="text-right">
+                <span className="text-slate-400 print:text-slate-500 block text-[11px]">Fecha y Hora:</span>
+                <strong className="text-white print:text-black">
+                  {new Date(issuedReceipt.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })} • {new Date(issuedReceipt.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                </strong>
+                <span className="text-slate-400 print:text-slate-600 block text-[11px] mt-0.5">
+                  Cajero: {issuedReceipt.cashier || 'Caja Central'}
+                </span>
+              </div>
+            </div>
+
+            {/* Tabla Detallada de Ítems */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 print:text-slate-700 block">
+                Detalle de Servicios Hospitalarios
+              </span>
+              <div className="rounded-xl border border-slate-800 overflow-hidden print:border-slate-300">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400 print:bg-slate-100 print:border-slate-300 print:text-slate-700">
+                    <tr>
+                      <th className="py-2 px-3 text-left font-bold">Concepto / Área</th>
+                      <th className="py-2 px-3 text-right font-bold">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80 print:divide-slate-200">
+                    {issuedReceipt.items.map((it, idx) => (
+                      <tr key={it.id + idx} className="hover:bg-slate-800/30">
+                        <td className="py-2 px-3 text-slate-200 print:text-black">
+                          <span className="font-semibold block">{it.description}</span>
+                          <span className="text-[10px] text-slate-400 print:text-slate-500 uppercase">{it.type}</span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-white print:text-black">
+                          S/ {it.amount.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Subtotales y Total Liquidado */}
+            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2 print:bg-slate-100 print:border-slate-300">
+              <div className="flex justify-between text-xs text-slate-400 print:text-slate-600">
+                <span>Forma de Pago:</span>
+                <span className="font-bold text-slate-200 print:text-black uppercase">{issuedReceipt.paymentMethod}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-800 print:border-slate-300">
+                <span className="font-extrabold uppercase text-white print:text-black">TOTAL CANCELADO:</span>
+                <span className="font-mono text-xl font-black text-emerald-400 print:text-emerald-700">
+                  S/ {issuedReceipt.grandTotal.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Pie de Boleta */}
+            <div className="text-center text-[10px] text-slate-500 print:text-slate-600 space-y-0.5 border-t border-slate-800/80 pt-3 print:border-slate-200">
+              <p>¡Gracias por confiar en Clínica Integral!</p>
+              <p>Comprobante de pago emitido electrónicamente de acuerdo a normativa hospitalaria vigente.</p>
+            </div>
+
+            {/* Acciones de Impresión (Ocultas al Imprimir) */}
+            <div className="flex items-center justify-end gap-3 pt-2 print:hidden">
+              <button
+                type="button"
+                onClick={() => setIssuedReceipt(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-all"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1.5 shadow-lg shadow-emerald-950 transition-all"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Imprimir Boleta</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppointmentStatus, Role, PaymentStatus, PaymentMethod } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { authenticateJwt, authorizeRoles, AuthRequest } from '../middlewares/auth.middleware';
+import { generateQueueCode, assignConsultingRoom } from '../utils/queue.utils';
 
 const router = Router();
 
@@ -123,6 +124,10 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Generar código de turno correlativo y consultorio
+    const queueCode = await generateQueueCode(doctor.specialty.name, scheduledDate);
+    const consultingRoom = assignConsultingRoom(doctor.id);
+
     // Crear la cita médica
     const newAppointment = await prisma.appointment.create({
       data: {
@@ -133,6 +138,8 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         notes,
         status: AppointmentStatus.PENDING,
         paymentStatus: PaymentStatus.UNPAID,
+        queueCode,
+        consultingRoom,
       },
       include: {
         patient: {
@@ -175,6 +182,9 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         id: newAppointment.id,
         scheduledAt: newAppointment.scheduledAt,
         status: newAppointment.status,
+        queueCode: newAppointment.queueCode,
+        consultingRoom: newAppointment.consultingRoom,
+        calledAt: newAppointment.calledAt,
         reason: newAppointment.reason,
         notes: newAppointment.notes,
         paymentStatus: newAppointment.paymentStatus,
@@ -264,6 +274,9 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
         id: app.id,
         scheduledAt: app.scheduledAt,
         status: app.status,
+        queueCode: app.queueCode,
+        consultingRoom: app.consultingRoom,
+        calledAt: app.calledAt,
         reason: app.reason,
         notes: app.notes,
         paymentStatus: app.paymentStatus,
@@ -444,7 +457,11 @@ router.patch('/:id/status', authenticateJwt, async (req: AuthRequest, res: Respo
     const appointment = await prisma.appointment.findUnique({
       where: { id },
       include: {
-        doctor: true,
+        doctor: {
+          include: {
+            specialty: true,
+          },
+        },
       },
     });
 
@@ -467,9 +484,19 @@ router.patch('/:id/status', authenticateJwt, async (req: AuthRequest, res: Respo
       }
     }
 
+    const updateData: any = { status: targetStatus };
+    if (targetStatus === AppointmentStatus.CONFIRMED) {
+      if (!appointment.queueCode) {
+        updateData.queueCode = await generateQueueCode(appointment.doctor.specialty.name, appointment.scheduledAt);
+      }
+      if (!appointment.consultingRoom) {
+        updateData.consultingRoom = assignConsultingRoom(appointment.doctorId);
+      }
+    }
+
     const updatedAppointment = await prisma.appointment.update({
       where: { id },
-      data: { status: targetStatus },
+      data: updateData,
       include: {
         patient: {
           select: {
@@ -544,6 +571,9 @@ router.patch('/:id/status', authenticateJwt, async (req: AuthRequest, res: Respo
         id: updatedAppointment.id,
         scheduledAt: updatedAppointment.scheduledAt,
         status: updatedAppointment.status,
+        queueCode: updatedAppointment.queueCode,
+        consultingRoom: updatedAppointment.consultingRoom,
+        calledAt: updatedAppointment.calledAt,
         patientName: updatedAppointment.patient.fullName,
         doctorName: updatedAppointment.doctor.user.fullName,
         specialty: updatedAppointment.doctor.specialty.name,
@@ -658,6 +688,107 @@ router.post(
       return res.status(500).json({
         error: 'Error interno del servidor al procesar la calificación.',
       });
+    }
+  }
+);
+
+// PATCH /api/appointments/:id/call - Llamar paciente a consultorio (DOCTOR, ADMIN, RECEPTIONIST)
+router.patch(
+  '/:id/call',
+  authenticateJwt,
+  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { consultingRoom } = req.body;
+
+      const appointment = await prisma.appointment.findUnique({
+        where: { id },
+        include: {
+          patient: {
+            select: { id: true, fullName: true, email: true, phone: true },
+          },
+          doctor: {
+            include: {
+              user: { select: { fullName: true } },
+              specialty: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      if (!appointment) {
+        return res.status(404).json({ error: 'Cita médica no encontrada.' });
+      }
+
+      // Si es DOCTOR, verificar que sea el médico de la cita
+      if (req.user?.role === Role.DOCTOR && appointment.doctor.userId !== req.user.id) {
+        return res.status(403).json({ error: 'No tienes permiso para llamar citas asignadas a otro especialista.' });
+      }
+
+      let queueCode = appointment.queueCode;
+      if (!queueCode) {
+        queueCode = await generateQueueCode(appointment.doctor.specialty.name, appointment.scheduledAt);
+      }
+
+      const room = consultingRoom?.trim() || appointment.consultingRoom || assignConsultingRoom(appointment.doctorId);
+      const now = new Date();
+
+      const updated = await prisma.appointment.update({
+        where: { id },
+        data: {
+          calledAt: now,
+          queueCode,
+          consultingRoom: room,
+          status: appointment.status === AppointmentStatus.PENDING ? AppointmentStatus.CONFIRMED : appointment.status,
+        },
+        include: {
+          patient: {
+            select: { id: true, fullName: true, email: true, phone: true },
+          },
+          doctor: {
+            include: {
+              user: { select: { fullName: true } },
+              specialty: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      // Notificación automática al paciente
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: appointment.patient.id,
+            title: '¡Es tu turno de atención médica!',
+            message: `Estimado(a) ${appointment.patient.fullName}, es tu turno. Por favor acércate a ${room} con el/la especialista ${appointment.doctor.user.fullName} (${appointment.doctor.specialty.name}). Tu código de turno es ${queueCode}.`,
+            type: 'APPOINTMENT',
+          },
+        });
+      } catch (notifErr) {
+        console.error('Error al generar notificación de llamado:', notifErr);
+      }
+
+      return res.status(200).json({
+        message: `Paciente ${appointment.patient.fullName} llamado a ${room}`,
+        appointment: {
+          id: updated.id,
+          queueCode: updated.queueCode,
+          consultingRoom: updated.consultingRoom,
+          calledAt: updated.calledAt,
+          status: updated.status,
+          scheduledAt: updated.scheduledAt,
+          patient: updated.patient,
+          doctor: {
+            id: updated.doctor.id,
+            fullName: updated.doctor.user.fullName,
+            specialty: updated.doctor.specialty.name,
+          },
+        },
+      });
+    } catch (error: any) {
+      console.error('Error al llamar al paciente a consultorio:', error);
+      return res.status(500).json({ error: 'Error interno del servidor al llamar al paciente.' });
     }
   }
 );

@@ -125,6 +125,11 @@ model Appointment {
   reason        String
   notes         String?
 
+  // Control de turnos y sala de espera
+  queueCode      String?
+  consultingRoom String?
+  calledAt       DateTime?
+
   // Control de pagos
   paymentStatus PaymentStatus     @default(UNPAID)
   paymentMethod PaymentMethod?
@@ -321,3 +326,23 @@ model ObservationBed {
 
   @@map("observation_beds")
 }
+
+model BillingReceipt {
+  id                 String   @id @default(uuid())
+  receiptNumber      String   @unique // BOL-2026-XXXX
+  patientId          String
+  patientName        String
+  cashierId          String?
+  cashierName        String?
+  paymentMethod      String   // EFECTIVO, YAPE_PLIN, TARJETA, TRANSFERENCIA
+  totalAmount        Float
+  consultationTotal  Float    @default(0)
+  pharmacyTotal      Float    @default(0)
+  labTotal           Float    @default(0)
+  topicTotal         Float    @default(0)
+  itemsJson          String   @db.Text
+  createdAt          DateTime @default(now())
+
+  @@map("billing_receipts")
+}
+

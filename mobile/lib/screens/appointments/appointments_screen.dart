@@ -513,6 +513,79 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                     ),
                   ),
                 ),
+                // Badge Código de Turno (Bloque B)
+                if (app.queueCode != null && app.queueCode!.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F766E).withValues(alpha: 0.12),
+                      border: Border.all(
+                        color: const Color(0xFF14B8A6).withValues(alpha: 0.35),
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF14B8A6),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Turno: ${app.queueCode}',
+                          style: const TextStyle(
+                            color: Color(0xFF0F766E),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // Badge Consultorio
+                if (app.consultingRoom != null && app.consultingRoom!.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      app.consultingRoom!,
+                      style: const TextStyle(
+                        color: Colors.blueGrey,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                // Badge Estado de Llamado
+                if (app.calledAt != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD1FAE5),
+                      border: Border.all(color: const Color(0xFF10B981)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      '¡LLAMANDO AHORA!',
+                      style: TextStyle(
+                        color: Color(0xFF047857),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
               ],
             ),
             const Divider(height: 20, color: AppTheme.border),
