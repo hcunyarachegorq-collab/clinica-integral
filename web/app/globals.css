@@ -155,3 +155,73 @@ body {
   scrollbar-width: none;
 }
 
+/* ========================================================== */
+/* SISTEMA NEUMORFISMO / SOFT UI CLÍNICO                     */
+/* Base: #E8F0F7 | Superficie: #EEF4FA | Acento: #0284C7 / #0D9488 */
+/* ========================================================== */
+
+/* Tarjeta Neumórfica Central Suave */
+.neu-card {
+  background: #EEF4FA;
+  box-shadow: -10px -10px 24px #ffffff, 10px 10px 24px rgba(163, 189, 214, 0.45);
+}
+
+/* Relieve Exterior Cuadrado (Icono Superior) */
+.neu-relief {
+  background: #EEF4FA;
+  box-shadow: -6px -6px 14px #ffffff, 6px 6px 14px rgba(163, 189, 214, 0.45);
+}
+
+/* Input Hundido Neumórfico (Inset Shadow) */
+.neu-inset {
+  background: #EAF0F6;
+  box-shadow: inset 4px 4px 8px rgba(163, 189, 214, 0.45), inset -4px -4px 8px #ffffff;
+}
+
+/* Botón Neumórfico Suave en Relieve */
+.neu-button {
+  background: #EEF4FA;
+  box-shadow: -5px -5px 12px #ffffff, 5px 5px 12px rgba(163, 189, 214, 0.45);
+}
+
+/* Botón Circular Neumórfico (+ / ←) */
+.neu-circle-btn {
+  background: #EEF4FA;
+  box-shadow: -4px -4px 10px #ffffff, 4px 4px 10px rgba(163, 189, 214, 0.45);
+}
+
+.neu-circle-btn:active {
+  box-shadow: inset 3px 3px 6px rgba(163, 189, 214, 0.45), inset -3px -3px 6px #ffffff;
+}
+
+/* Píldora Neumórfica Suave (Accesos rápidos demo) */
+.neu-pill {
+  background: #EEF4FA;
+  box-shadow: -3px -3px 8px #ffffff, 3px 3px 8px rgba(163, 189, 214, 0.35);
+}
+
+.neu-pill:hover {
+  box-shadow: -4px -4px 12px #ffffff, 4px 4px 12px rgba(163, 189, 214, 0.5);
+}
+
+.neu-pill:active {
+  box-shadow: inset 2px 2px 5px rgba(163, 189, 214, 0.4), inset -2px -2px 5px #ffffff;
+}
+
+/* Esferas 3D Volumétricas y Suaves de Fondo */
+.sphere-3d-blue {
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #bae6fd 25%, #0284c7 70%, #0369a1 100%);
+  box-shadow: 20px 24px 50px rgba(2, 132, 199, 0.22), inset -12px -12px 24px rgba(3, 105, 161, 0.6), inset 12px 12px 24px rgba(255, 255, 255, 0.85);
+}
+
+.sphere-3d-teal {
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #99f6e4 25%, #0d9488 70%, #0f766e 100%);
+  box-shadow: 20px 24px 50px rgba(13, 148, 136, 0.22), inset -12px -12px 24px rgba(15, 118, 110, 0.6), inset 12px 12px 24px rgba(255, 255, 255, 0.85);
+}
+
+.sphere-3d-pearl {
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #f0f7ff 35%, #dbeafe 75%, #94a3b8 100%);
+  box-shadow: 18px 22px 45px rgba(148, 163, 184, 0.22), inset -10px -10px 20px rgba(148, 163, 184, 0.4), inset 10px 10px 20px rgba(255, 255, 255, 0.95);
+}
+
+
