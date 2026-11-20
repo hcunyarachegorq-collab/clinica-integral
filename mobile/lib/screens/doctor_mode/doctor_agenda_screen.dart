@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../models/appointment.dart';
@@ -140,6 +141,7 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
   }
 
   Future<void> _callPatientToRoom(Appointment app) async {
+    HapticFeedback.mediumImpact();
     setState(() {
       _actionLoading[app.id] = true;
     });
@@ -294,6 +296,7 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                       count: _allAppointments.length,
                       color: AppTheme.primary,
                       bgColor: const Color(0xFFF0FDFA),
+                      filterKey: 'TODOS',
                     ),
                     const SizedBox(width: 8),
                     _buildKpiCard(
@@ -301,6 +304,7 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                       count: pendingCount,
                       color: const Color(0xFFD97706),
                       bgColor: const Color(0xFFFEF3C7),
+                      filterKey: 'PENDING',
                     ),
                     const SizedBox(width: 8),
                     _buildKpiCard(
@@ -308,6 +312,7 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                       count: confirmedCount,
                       color: const Color(0xFF0284C7),
                       bgColor: const Color(0xFFE0F2FE),
+                      filterKey: 'CONFIRMED',
                     ),
                     const SizedBox(width: 8),
                     _buildKpiCard(
@@ -315,6 +320,7 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                       count: completedCount,
                       color: const Color(0xFF059669),
                       bgColor: const Color(0xFFD1FAE5),
+                      filterKey: 'COMPLETED',
                     ),
                   ],
                 ),
@@ -414,8 +420,8 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                       const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final app = _filteredAppointments[index];
-                    return FadeSlideEntry(
-                      delay: Duration(milliseconds: 35 * index),
+                    return StaggeredSlideFade(
+                      index: index,
                       child: _buildDoctorAppointmentCard(app),
                     );
                   },
@@ -432,37 +438,60 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
     required int count,
     required Color color,
     required Color bgColor,
+    required String filterKey,
   }) {
+    final isSelected = _selectedFilter == filterKey;
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              count.toString(),
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+      child: BouncyButton(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() {
+            _selectedFilter = filterKey;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected ? color : color.withValues(alpha: 0.25),
+              width: isSelected ? 2 : 1,
             ),
-            const SizedBox(height: 2),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: color,
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            children: [
+              AnimatedCounter(
+                value: count,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -619,30 +648,11 @@ class _DoctorAgendaScreenState extends State<DoctorAgendaScreen> {
                     ),
                   ),
                 if (app.calledAt != null)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE0F2FE),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF0284C7)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.campaign_rounded,
-                            size: 12, color: Color(0xFF0284C7)),
-                        SizedBox(width: 4),
-                        Text(
-                          'LLAMADO',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0284C7),
-                          ),
-                        ),
-                      ],
-                    ),
+                  const PulseBadge(
+                    label: 'LLAMADO',
+                    color: Color(0xFF0284C7),
+                    icon: Icons.campaign_rounded,
+                    fontSize: 9.5,
                   ),
               ],
             ),

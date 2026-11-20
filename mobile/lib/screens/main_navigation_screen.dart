@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/motion_widgets.dart';
 import 'home/home_screen.dart';
 import 'doctors/doctors_screen.dart';
 import 'appointments/appointments_screen.dart';
@@ -59,32 +60,33 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
     ];
 
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
         children: screens,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: switchTab,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
+      bottomNavigationBar: FloatingPillNavBar(
+        currentIndex: _currentIndex,
+        onTap: switchTab,
+        items: const [
+          FloatingPillNavItem(
+            icon: Icons.home_outlined,
+            selectedIcon: Icons.home_rounded,
             label: 'Inicio',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.medical_services_outlined),
-            selectedIcon: Icon(Icons.medical_services_rounded),
+          FloatingPillNavItem(
+            icon: Icons.medical_services_outlined,
+            selectedIcon: Icons.medical_services_rounded,
             label: 'Doctores',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month_rounded),
+          FloatingPillNavItem(
+            icon: Icons.calendar_month_outlined,
+            selectedIcon: Icons.calendar_month_rounded,
             label: 'Mis Citas',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.history_edu_outlined),
-            selectedIcon: Icon(Icons.history_edu_rounded),
+          FloatingPillNavItem(
+            icon: Icons.history_edu_outlined,
+            selectedIcon: Icons.history_edu_rounded,
             label: 'Historial',
           ),
         ],

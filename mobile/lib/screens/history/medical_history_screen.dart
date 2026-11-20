@@ -249,14 +249,10 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
               const SizedBox(height: 12),
 
               if (_isLoading)
-                Column(
-                  children: List.generate(
-                    3,
-                    (i) => const Padding(
-                      padding: EdgeInsets.only(bottom: 14),
-                      child: ShimmerAppointmentCard(),
-                    ),
-                  ),
+                ShimmerSkeleton.list(
+                  count: 3,
+                  itemHeight: 120,
+                  padding: EdgeInsets.zero,
                 )
               else if (_errorMessage != null)
                 Center(
@@ -318,8 +314,8 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
                   separatorBuilder: (context, index) => const SizedBox(height: 16),
                   itemBuilder: (context, index) {
                     final record = _records[index];
-                    return FadeSlideEntry(
-                      delay: Duration(milliseconds: 35 * index),
+                    return StaggeredSlideFade(
+                      index: index,
                       child: _buildRecordCard(record, user),
                     );
                   },

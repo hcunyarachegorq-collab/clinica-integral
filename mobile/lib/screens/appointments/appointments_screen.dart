@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../models/appointment.dart';
@@ -408,8 +409,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                                   const SizedBox(height: 14),
                               itemBuilder: (context, index) {
                                 final app = _filteredAppointments[index];
-                                return FadeSlideEntry(
-                                  delay: Duration(milliseconds: 35 * index),
+                                return StaggeredSlideFade(
+                                  index: index,
                                   child: _buildAppointmentCard(app),
                                 );
                               },
@@ -423,19 +424,43 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
   Widget _buildFilterChip(String label, String value) {
     final isSelected = _selectedFilter == value;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (selected) {
-          if (selected) {
-            setState(() {
-              _selectedFilter = value;
-            });
-            _applyFilter();
-          }
-        },
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _selectedFilter = value;
+        });
+        _applyFilter();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0284C7) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : const Color(0xFF475569),
+            fontSize: 12.5,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -569,22 +594,16 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                   ),
                 // Badge Estado de Llamado
                 if (app.calledAt != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFD1FAE5),
-                      border: Border.all(color: const Color(0xFF10B981)),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      '¡LLAMANDO AHORA!',
-                      style: TextStyle(
-                        color: Color(0xFF047857),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
+                  const PulseBadge(
+                    label: '¡LLAMANDO AHORA!',
+                    color: Color(0xFFEF4444),
+                    fontSize: 9.5,
+                  )
+                else if (app.isConfirmed && app.queueCode != null)
+                  const PulseBadge(
+                    label: 'Turno Activo',
+                    color: Color(0xFF0284C7),
+                    fontSize: 9.5,
                   ),
               ],
             ),

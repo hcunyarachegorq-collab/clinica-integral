@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+export 'motion_widgets.dart';
 
 /// 1. FadeSlideEntry: Deslizamiento suave vertical + desvanecimiento escalonado
 class FadeSlideEntry extends StatefulWidget {

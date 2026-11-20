@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../models/appointment.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/motion_widgets.dart';
 import '../profile/edit_profile_screen.dart';
 
 class NurseDashboardScreen extends StatefulWidget {
@@ -24,27 +25,30 @@ class _NurseDashboardScreenState extends State<NurseDashboardScreen> {
     ];
 
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
         children: screens,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (idx) {
+      bottomNavigationBar: FloatingPillNavBar(
+        currentIndex: _currentIndex,
+        onTap: (idx) {
           setState(() {
             _currentIndex = idx;
           });
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.assignment_outlined),
-            selectedIcon: Icon(Icons.assignment_rounded),
+        items: const [
+          FloatingPillNavItem(
+            icon: Icons.assignment_outlined,
+            selectedIcon: Icons.assignment_rounded,
             label: 'Citas & Triaje',
+            activeColor: Color(0xFF0D9488),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
+          FloatingPillNavItem(
+            icon: Icons.person_outline_rounded,
+            selectedIcon: Icons.person_rounded,
             label: 'Mi Perfil',
+            activeColor: Color(0xFF0284C7),
           ),
         ],
       ),

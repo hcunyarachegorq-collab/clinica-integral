@@ -185,77 +185,15 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
 
       if (!mounted) return;
 
-      showDialog(
+      BookingSuccessDialog.show(
         context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: const [
-              Icon(Icons.check_circle_rounded,
-                  color: AppTheme.accent, size: 28),
-              SizedBox(width: 10),
-              Text('¡Cita Confirmada!'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Tu cita médica con el Dr. ${widget.doctor.fullName} ha sido programada exitosamente.',
-                style: const TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Fecha: ${DateFormat('EEEE d MMMM yyyy', 'es').format(_selectedDate)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                    Text(
-                      'Hora: $_selectedSlot hrs',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                    Text(
-                      'Tarifa: ${widget.doctor.formattedFee}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                Navigator.of(context).pop(true); // Retorna a la lista
-              },
-              child: const Text('Entendido'),
-            ),
-          ],
-        ),
+        doctorName: widget.doctor.fullName,
+        dateFormatted: DateFormat('EEEE d MMMM yyyy', 'es').format(_selectedDate),
+        timeFormatted: '$_selectedSlot hrs',
+        feeFormatted: widget.doctor.formattedFee,
+        onDismiss: () {
+          Navigator.of(context).pop(true);
+        },
       );
     } catch (e) {
       if (mounted) {
@@ -314,12 +252,18 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.doctor.fullName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
+                            Hero(
+                              tag: 'doctor_name_${widget.doctor.id}',
+                              child: Material(
+                                color: Colors.transparent,
+                                child: Text(
+                                  widget.doctor.fullName,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
                               ),
                             ),
                             Text(
@@ -447,11 +391,22 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
                 child: _isLoadingSlots
-                    ? const Center(
-                        key: ValueKey('loading_slots'),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ? Container(
+                        key: const ValueKey('loading_slots'),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Row(
+                          children: List.generate(
+                            4,
+                            (i) => Expanded(
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                child: const ShimmerSkeleton(
+                                  height: 38,
+                                  borderRadius: 20,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       )
                     : _isBlocked

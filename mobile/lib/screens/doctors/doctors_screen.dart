@@ -252,8 +252,8 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                                   const SizedBox(height: 14),
                               itemBuilder: (context, index) {
                                 final doctor = _filteredDoctors[index];
-                                return FadeSlideEntry(
-                                  delay: Duration(milliseconds: 35 * index),
+                                return StaggeredSlideFade(
+                                  index: index,
                                   child: _buildDoctorCard(doctor),
                                 );
                               },
@@ -297,14 +297,20 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        doctor.fullName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
+                      Hero(
+                        tag: 'doctor_name_${doctor.id}',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Text(
+                            doctor.fullName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 4),

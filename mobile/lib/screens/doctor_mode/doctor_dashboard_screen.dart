@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/motion_widgets.dart';
 import '../profile/edit_profile_screen.dart';
 import 'doctor_agenda_screen.dart';
 
@@ -23,27 +24,30 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     ];
 
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
         children: screens,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (idx) {
+      bottomNavigationBar: FloatingPillNavBar(
+        currentIndex: _currentIndex,
+        onTap: (idx) {
           setState(() {
             _currentIndex = idx;
           });
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month_rounded),
+        items: const [
+          FloatingPillNavItem(
+            icon: Icons.calendar_month_outlined,
+            selectedIcon: Icons.calendar_month_rounded,
             label: 'Mi Agenda',
+            activeColor: Color(0xFF0284C7),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
+          FloatingPillNavItem(
+            icon: Icons.person_outline_rounded,
+            selectedIcon: Icons.person_rounded,
             label: 'Mi Perfil',
+            activeColor: Color(0xFF0D9488),
           ),
         ],
       ),
