@@ -32,7 +32,7 @@ router.get(
 router.patch(
   '/:id/admit',
   authenticateJwt,
-  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST),
+  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST, Role.NURSE),
   async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
@@ -95,7 +95,7 @@ router.patch(
 router.patch(
   '/:id/discharge',
   authenticateJwt,
-  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST),
+  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST, Role.NURSE),
   async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
@@ -146,7 +146,7 @@ router.patch(
 router.patch(
   '/:id/status',
   authenticateJwt,
-  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST),
+  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST, Role.NURSE),
   async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;

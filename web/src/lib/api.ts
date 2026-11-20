@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'DOCTOR' | 'RECEPTIONIST' | 'PATIENT';
+export type Role = 'ADMIN' | 'DOCTOR' | 'RECEPTIONIST' | 'NURSE' | 'PATIENT';
 export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
 export type PaymentStatus = 'UNPAID' | 'PAID' | 'REFUNDED';
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'INSURANCE';

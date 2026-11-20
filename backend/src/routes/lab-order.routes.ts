@@ -5,11 +5,11 @@ import { authenticateJwt, authorizeRoles, AuthRequest } from '../middlewares/aut
 
 const router = Router();
 
-// GET /api/lab-orders/catalog - Listar catálogo de exámenes (ADMIN, DOCTOR, RECEPTIONIST)
+// GET /api/lab-orders/catalog - Listar catálogo de exámenes (ADMIN, DOCTOR, RECEPTIONIST, NURSE)
 router.get(
   '/catalog',
   authenticateJwt,
-  authorizeRoles(Role.ADMIN, Role.DOCTOR, Role.RECEPTIONIST),
+  authorizeRoles(Role.ADMIN, Role.DOCTOR, Role.RECEPTIONIST, Role.NURSE),
   async (_req: AuthRequest, res: Response) => {
     try {
       const items = await prisma.labCatalogItem.findMany({

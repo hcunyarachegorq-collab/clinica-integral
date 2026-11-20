@@ -1903,7 +1903,7 @@ function DashboardContent() {
               <span className="text-[11px] text-slate-400">{user.email}</span>
             </div>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
-              {user.role}
+              {user.role === 'NURSE' ? 'Enfermería & Triaje' : user.role}
             </span>
 
             {/* Campana de Notificaciones */}
@@ -2001,6 +2001,8 @@ function DashboardContent() {
                 ? 'Gestiona tus citas con horarios en tiempo real, revisa tu triaje y descarga recibos de pago.'
                 : user.role === 'DOCTOR'
                 ? 'Monitorea signos vitales en triaje, consulta expedientes históricos y prescribe recetas farmacológicas.'
+                : user.role === 'NURSE'
+                ? 'Estación de Enfermería: Registro y control de Triaje, Camillas/Boxes de Tópico y consulta de Laboratorio.'
                 : 'Gestión clínica, control de caja y pagos, y panel analítico ejecutivo.'}
             </p>
           </div>
@@ -2016,7 +2018,7 @@ function DashboardContent() {
               }`}
             >
               <Calendar className="h-3.5 w-3.5" />
-              <span>{user.role === 'PATIENT' ? 'Mis Citas' : 'Citas'}</span>
+              <span>{user.role === 'PATIENT' ? 'Mis Citas' : user.role === 'NURSE' ? 'Citas & Triaje' : 'Citas'}</span>
             </button>
 
             <button
@@ -2050,7 +2052,7 @@ function DashboardContent() {
             </button>
 
             {/* Pestaña Tópico */}
-            {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
+            {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST' || user.role === 'NURSE') && (
               <button
                 onClick={() => setActiveTab('observation_beds')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
@@ -2065,7 +2067,7 @@ function DashboardContent() {
             )}
 
             {/* Pestaña Pacientes */}
-            {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
+            {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST' || user.role === 'NURSE') && (
               <button
                 onClick={() => setActiveTab('patients')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
@@ -2861,7 +2863,7 @@ function DashboardContent() {
                             {/* Acciones principales */}
                             <div className="flex items-center gap-2 flex-wrap">
                               {/* Botón Triaje */}
-                              {(user.role === 'DOCTOR' || user.role === 'ADMIN') && (
+                              {(user.role === 'DOCTOR' || user.role === 'ADMIN' || user.role === 'NURSE' || user.role === 'RECEPTIONIST') && (
                                 <button
                                   onClick={() => {
                                     setSelectedAppForTriage(app);
@@ -2874,16 +2876,29 @@ function DashboardContent() {
                                       setTriageO2(app.triage.oxygenSaturation.toString());
                                       setTriageAllergies(app.triage.allergies || '');
                                       setTriageNotes(app.triage.notes || '');
+                                    } else {
+                                      setTriageBP('120/80');
+                                      setTriageHR('75');
+                                      setTriageTemp('36.5');
+                                      setTriageWeight('70');
+                                      setTriageHeight('170');
+                                      setTriageO2('98');
+                                      setTriageAllergies('');
+                                      setTriageNotes('');
                                     }
                                   }}
                                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                                    app.triage
+                                    user.role === 'NURSE'
+                                      ? app.triage
+                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                                        : 'bg-teal-600 hover:bg-teal-500 text-white font-bold shadow-md shadow-teal-900/40 ring-1 ring-teal-400/40'
+                                      : app.triage
                                       ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
                                       : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700'
                                   }`}
                                 >
                                   <Activity className="h-3.5 w-3.5 text-teal-400" />
-                                  <span>{app.triage ? 'Triaje Listo' : 'Triaje / Signos'}</span>
+                                  <span>{app.triage ? 'Triaje Listo ✓' : 'Registrar Triaje'}</span>
                                 </button>
                               )}
 
@@ -3988,7 +4003,7 @@ function DashboardContent() {
         {/* ============================================================== */}
         {/* PESTAÑA 4: DIRECTORIO Y BUSCADOR DE PACIENTES                 */}
         {/* ============================================================== */}
-        {activeTab === 'patients' && (user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
+        {activeTab === 'patients' && (user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST' || user.role === 'NURSE') && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -4493,7 +4508,7 @@ function DashboardContent() {
         {/* ============================================================== */}
         {/* PESTAÑA: TÓPICO DE URGENCIAS & CAMILLAS DE OBSERVACIÓN         */}
         {/* ============================================================== */}
-        {activeTab === 'observation_beds' && (user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
+        {activeTab === 'observation_beds' && (user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST' || user.role === 'NURSE') && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -7417,8 +7432,8 @@ function DashboardContent() {
           <span className="text-[10px] leading-none">Historial</span>
         </button>
 
-        {/* Botón Pacientes (ADMIN, DOCTOR, RECEPTIONIST) */}
-        {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST') && (
+        {/* Botón Pacientes (ADMIN, DOCTOR, RECEPTIONIST, NURSE) */}
+        {(user.role === 'ADMIN' || user.role === 'DOCTOR' || user.role === 'RECEPTIONIST' || user.role === 'NURSE') && (
           <button
             type="button"
             onClick={() => setActiveTab('patients')}

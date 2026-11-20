@@ -5,11 +5,11 @@ import { authenticateJwt, authorizeRoles, AuthRequest } from '../middlewares/aut
 
 const router = Router();
 
-// GET /api/patients?search=... (Directorio y buscador para ADMIN, RECEPTIONIST, DOCTOR)
+// GET /api/patients?search=... (Directorio y buscador para ADMIN, RECEPTIONIST, DOCTOR, NURSE)
 router.get(
   '/',
   authenticateJwt,
-  authorizeRoles(Role.ADMIN, Role.RECEPTIONIST, Role.DOCTOR),
+  authorizeRoles(Role.ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.NURSE),
   async (req: AuthRequest, res: Response) => {
     try {
       const search = req.query.search ? String(req.query.search).trim() : '';
@@ -91,11 +91,11 @@ router.get(
   }
 );
 
-// GET /api/patients/:id/history (DOCTOR, ADMIN, RECEPTIONIST)
+// GET /api/patients/:id/history (DOCTOR, ADMIN, RECEPTIONIST, NURSE)
 router.get(
   '/:id/history',
   authenticateJwt,
-  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST),
+  authorizeRoles(Role.DOCTOR, Role.ADMIN, Role.RECEPTIONIST, Role.NURSE),
   async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;

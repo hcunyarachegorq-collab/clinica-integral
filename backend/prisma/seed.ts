@@ -25,6 +25,7 @@ async function main() {
   const adminPassword = await bcrypt.hash('Admin123!', 10);
   const doctorPassword = await bcrypt.hash('Doctor123!', 10);
   const patientPassword = await bcrypt.hash('Paciente123!', 10);
+  const nursePassword = await bcrypt.hash('Nurse123!', 10);
 
   // 2. Administrador del Sistema
   const admin = await prisma.user.upsert({
@@ -40,6 +41,26 @@ async function main() {
     },
   });
   console.log(`[Seed] Administrador listo: ${admin.email}`);
+
+  // 2.1. Enfermería / Triaje y Tópico Oficial
+  const nurse = await prisma.user.upsert({
+    where: { email: 'enfermeria@clinica.com' },
+    update: {
+      passwordHash: nursePassword,
+      role: Role.NURSE,
+      fullName: 'Lic. Carmen Mendoza',
+      isActive: true,
+    },
+    create: {
+      email: 'enfermeria@clinica.com',
+      fullName: 'Lic. Carmen Mendoza',
+      phone: '+51 923 456 789',
+      passwordHash: nursePassword,
+      role: Role.NURSE,
+      isActive: true,
+    },
+  });
+  console.log(`[Seed] Enfermería listo: ${nurse.email}`);
 
   // 3. Paciente de prueba oficial
   const paciente = await prisma.user.upsert({

@@ -314,53 +314,62 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/appointments/:id/triage - Registrar o actualizar signos vitales
+// POST y PATCH /api/appointments/:id/triage - Registrar o actualizar signos vitales (Triaje)
+const handleTriage = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const parseResult = triageSchema.safeParse(req.body);
+
+    if (!parseResult.success) {
+      return res.status(400).json({
+        error: 'Datos de triaje inválidos',
+        details: parseResult.error.format(),
+      });
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id },
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Cita médica no encontrada.' });
+    }
+
+    const triage = await prisma.triage.upsert({
+      where: { appointmentId: id },
+      update: {
+        ...parseResult.data,
+      },
+      create: {
+        appointmentId: id,
+        ...parseResult.data,
+      },
+    });
+
+    return res.status(200).json({
+      message: 'Signos vitales de triaje registrados exitosamente',
+      triage,
+    });
+  } catch (error: any) {
+    console.error('Error al registrar triaje:', error);
+    return res.status(500).json({
+      error: 'Error interno del servidor al guardar el triaje.',
+    });
+  }
+};
+
 router.post(
   '/:id/triage',
   authenticateJwt,
-  authorizeRoles(Role.ADMIN, Role.RECEPTIONIST, Role.DOCTOR),
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const parseResult = triageSchema.safeParse(req.body);
+  authorizeRoles(Role.ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.NURSE),
+  handleTriage
+);
 
-      if (!parseResult.success) {
-        return res.status(400).json({
-          error: 'Datos de triaje inválidos',
-          details: parseResult.error.format(),
-        });
-      }
-
-      const appointment = await prisma.appointment.findUnique({
-        where: { id },
-      });
-
-      if (!appointment) {
-        return res.status(404).json({ error: 'Cita médica no encontrada.' });
-      }
-
-      const triage = await prisma.triage.upsert({
-        where: { appointmentId: id },
-        update: {
-          ...parseResult.data,
-        },
-        create: {
-          appointmentId: id,
-          ...parseResult.data,
-        },
-      });
-
-      return res.status(200).json({
-        message: 'Signos vitales de triaje registrados exitosamente',
-        triage,
-      });
-    } catch (error: any) {
-      console.error('Error al registrar triaje:', error);
-      return res.status(500).json({
-        error: 'Error interno del servidor al guardar el triaje.',
-      });
-    }
-  }
+router.patch(
+  '/:id/triage',
+  authenticateJwt,
+  authorizeRoles(Role.ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.NURSE),
+  handleTriage
 );
 
 // PATCH /api/appointments/:id/payment - Registrar cobro de cita

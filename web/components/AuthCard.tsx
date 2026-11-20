@@ -101,7 +101,12 @@ export function AuthCard({ initialMode = 'login' }: AuthCardProps) {
       toast.success('¡Bienvenido(a)!', `Hola ${loggedUser.fullName}, sesión iniciada con éxito.`);
 
       // Redirección inteligente por rol
-      if (loggedUser.role === 'ADMIN' || loggedUser.role === 'DOCTOR' || loggedUser.role === 'RECEPTIONIST') {
+      if (
+        loggedUser.role === 'ADMIN' ||
+        loggedUser.role === 'DOCTOR' ||
+        loggedUser.role === 'RECEPTIONIST' ||
+        loggedUser.role === 'NURSE'
+      ) {
         router.push('/dashboard');
       } else {
         router.push('/dashboard');
@@ -366,36 +371,46 @@ export function AuthCard({ initialMode = 'login' }: AuthCardProps) {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="grid grid-cols-3 gap-2 mt-3 pt-2"
+                    className="grid grid-cols-4 gap-1.5 sm:gap-2 mt-3 pt-2"
                   >
                     <button
                       type="button"
                       onClick={() => handleQuickDemo('admin@clinica.com', 'Admin123!')}
-                      className="neu-pill p-2 rounded-xl border border-white/70 text-center transition-all group"
+                      className="neu-pill p-1.5 sm:p-2 rounded-xl border border-white/70 text-center transition-all group"
                       title="Admin"
                     >
                       <Shield className="h-3.5 w-3.5 text-purple-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                      <span className="text-[10px] font-bold text-slate-700 block">Admin</span>
+                      <span className="text-[10px] font-bold text-slate-700 block truncate">Admin</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleQuickDemo('dr.garcia@clinica.com', 'Doctor123!')}
-                      className="neu-pill p-2 rounded-xl border border-white/70 text-center transition-all group"
+                      className="neu-pill p-1.5 sm:p-2 rounded-xl border border-white/70 text-center transition-all group"
                       title="Doctor"
                     >
                       <Stethoscope className="h-3.5 w-3.5 text-blue-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                      <span className="text-[10px] font-bold text-slate-700 block">Médico</span>
+                      <span className="text-[10px] font-bold text-slate-700 block truncate">Médico</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDemo('enfermeria@clinica.com', 'Nurse123!')}
+                      className="neu-pill p-1.5 sm:p-2 rounded-xl border border-white/70 text-center transition-all group"
+                      title="Enfermería & Triaje"
+                    >
+                      <HeartPulse className="h-3.5 w-3.5 text-teal-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-bold text-slate-700 block truncate">Enfermera</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleQuickDemo('paciente@clinica.com', 'Paciente123!')}
-                      className="neu-pill p-2 rounded-xl border border-white/70 text-center transition-all group"
+                      className="neu-pill p-1.5 sm:p-2 rounded-xl border border-white/70 text-center transition-all group"
                       title="Paciente"
                     >
-                      <User className="h-3.5 w-3.5 text-teal-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                      <span className="text-[10px] font-bold text-slate-700 block">Paciente</span>
+                      <User className="h-3.5 w-3.5 text-emerald-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-bold text-slate-700 block truncate">Paciente</span>
                     </button>
                   </motion.div>
                 )}

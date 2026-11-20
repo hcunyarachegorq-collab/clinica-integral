@@ -6,6 +6,7 @@ import 'doctors/doctors_screen.dart';
 import 'appointments/appointments_screen.dart';
 import 'history/medical_history_screen.dart';
 import 'doctor_mode/doctor_dashboard_screen.dart';
+import 'nurse_mode/nurse_dashboard_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final int initialIndex;
@@ -43,6 +44,11 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
     // Si el usuario autenticado tiene rol de DOCTOR, renderizar la experiencia médica móvil
     if (user != null && user.isDoctor) {
       return const DoctorDashboardScreen();
+    }
+
+    // Si el usuario autenticado tiene rol de ENFERMERÍA, renderizar la estación de enfermería móvil
+    if (user != null && user.isNurse) {
+      return const NurseDashboardScreen();
     }
 
     final screens = [

@@ -814,13 +814,16 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
 
             if (_showDemoPills) ...[
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              const SizedBox(height: 6),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 6,
+                runSpacing: 6,
                 children: [
                   _buildDemoChip('Admin', () => _fillDemo('admin@clinica.com', 'Admin123!', 'Admin'), Icons.security_rounded, const Color(0xFF9333EA)),
                   _buildDemoChip('Médico', () => _fillDemo('dr.garcia@clinica.com', 'Doctor123!', 'Médico'), Icons.medical_services_rounded, const Color(0xFF0284C7)),
-                  _buildDemoChip('Paciente', () => _fillDemo('paciente@clinica.com', 'Paciente123!', 'Paciente'), Icons.person_rounded, const Color(0xFF0D9488)),
+                  _buildDemoChip('Enfermera', () => _fillDemo('enfermeria@clinica.com', 'Nurse123!', 'Enfermera'), Icons.healing_rounded, const Color(0xFF0D9488)),
+                  _buildDemoChip('Paciente', () => _fillDemo('paciente@clinica.com', 'Paciente123!', 'Paciente'), Icons.person_rounded, const Color(0xFF10B981)),
                 ],
               ),
             ],
