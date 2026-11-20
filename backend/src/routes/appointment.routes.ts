@@ -70,7 +70,7 @@ router.post('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
 
     // Determinar ID del paciente según rol
     let effectivePatientId = req.user.id;
-    if (req.user.role === Role.ADMIN || req.user.role === Role.RECEPTIONIST) {
+    if (req.user.role === Role.ADMIN || req.user.role === Role.RECEPTIONIST || req.user.role === Role.NURSE) {
       if (patientId) {
         const patientExists = await prisma.user.findUnique({
           where: { id: patientId },
@@ -234,6 +234,7 @@ router.get('/', authenticateJwt, async (req: AuthRequest, res: Response) => {
 
       whereClause.doctorId = doctorProfile.id;
     } else {
+      // ADMIN, RECEPTIONIST y NURSE: acceso completo a todas las citas de la clínica con filtros opcionales
       const { doctorId, patientId, status } = req.query;
       if (doctorId && typeof doctorId === 'string') whereClause.doctorId = doctorId;
       if (patientId && typeof patientId === 'string') whereClause.patientId = patientId;

@@ -286,8 +286,9 @@ function DashboardContent() {
   const [reviewSubmitting, setReviewSubmitting] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
 
-  // Filtro de estado de citas
+  // Filtro de estado de citas y buscador
   const [statusFilter, setStatusFilter] = useState<string>('TODOS');
+  const [appointmentSearchQuery, setAppointmentSearchQuery] = useState<string>('');
 
   // Reserva de Citas (Paciente)
   const [bookSpecialtyId, setBookSpecialtyId] = useState<string>('');
@@ -1563,10 +1564,36 @@ function DashboardContent() {
   const pendingCount = appointments.filter((a) => a.status === 'PENDING').length;
   const confirmedCount = appointments.filter((a) => a.status === 'CONFIRMED').length;
   const completedCount = appointments.filter((a) => a.status === 'COMPLETED').length;
+  const triagePendingCount = appointments.filter((a) => !a.triage && a.status !== 'CANCELLED').length;
+  const triageCompletedCount = appointments.filter((a) => !!a.triage).length;
 
-  const filteredAppointments = statusFilter === 'TODOS'
-    ? appointments
-    : appointments.filter((a) => a.status === statusFilter);
+  const filteredAppointments = appointments.filter((a) => {
+    // Filtro por estado o condición de triaje
+    if (statusFilter === 'NO_TRIAGE') {
+      if (a.triage || a.status === 'CANCELLED') return false;
+    } else if (statusFilter !== 'TODOS') {
+      if (a.status !== statusFilter) return false;
+    }
+
+    // Buscador en citas (paciente, email, médico, motivo, turno)
+    if (appointmentSearchQuery.trim()) {
+      const q = appointmentSearchQuery.toLowerCase();
+      const patientName = a.patient?.fullName?.toLowerCase() || '';
+      const patientEmail = a.patient?.email?.toLowerCase() || '';
+      const doctorName = a.doctor?.fullName?.toLowerCase() || '';
+      const reason = a.reason?.toLowerCase() || '';
+      const queue = a.queueCode?.toLowerCase() || '';
+      return (
+        patientName.includes(q) ||
+        patientEmail.includes(q) ||
+        doctorName.includes(q) ||
+        reason.includes(q) ||
+        queue.includes(q)
+      );
+    }
+
+    return true;
+  });
 
   if (authLoading || (!user && authLoading)) {
     return (
@@ -2515,59 +2542,118 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* Si es DOCTOR o ADMIN: Listado con Triaje, Cobro y Atención */}
-            {(user.role === 'DOCTOR' || user.role === 'ADMIN') && (
+            {/* Si es DOCTOR, ADMIN, NURSE o RECEPTIONIST: Listado con Triaje, Cobro y Atención */}
+            {(user.role === 'DOCTOR' || user.role === 'ADMIN' || user.role === 'NURSE' || user.role === 'RECEPTIONIST') && (
               <div className="space-y-6">
                 {/* KPIs Superiores */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
-                    <span className="text-xs font-semibold text-slate-400">Total de Citas</span>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-white font-mono">{totalCount}</p>
-                  </div>
-                  <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
-                    <span className="text-xs font-semibold text-amber-400">Pendientes</span>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono">{pendingCount}</p>
-                  </div>
-                  <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
-                    <span className="text-xs font-semibold text-emerald-400">Confirmadas</span>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono">{confirmedCount}</p>
-                  </div>
-                  <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
-                    <span className="text-xs font-semibold text-sky-400">Completadas</span>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-sky-400 font-mono">{completedCount}</p>
-                  </div>
+                  {user.role === 'NURSE' ? (
+                    <>
+                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                        <span className="text-xs font-semibold text-amber-400">Citas Pendientes</span>
+                        <p className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono">{pendingCount}</p>
+                      </div>
+                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                        <span className="text-xs font-semibold text-emerald-400">Citas Confirmadas</span>
+                        <p className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono">{confirmedCount}</p>
+                      </div>
+                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                        <span className="text-xs font-semibold text-rose-400">Triaje Pendiente</span>
+                        <p className="text-2xl sm:text-3xl font-extrabold text-rose-400 font-mono">{triagePendingCount}</p>
+                      </div>
+                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                        <span className="text-xs font-semibold text-teal-400">Triaje Completado</span>
+                        <p className="text-2xl sm:text-3xl font-extrabold text-teal-400 font-mono">{triageCompletedCount}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                        <span className="text-xs font-semibold text-slate-400">Total de Citas</span>
+                        <p className="text-2xl sm:text-3xl font-extrabold text-white font-mono">{totalCount}</p>
+                      </div>
+                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                        <span className="text-xs font-semibold text-amber-400">Pendientes</span>
+                        <p className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono">{pendingCount}</p>
+                      </div>
+                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                        <span className="text-xs font-semibold text-emerald-400">Confirmadas</span>
+                        <p className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono">{confirmedCount}</p>
+                      </div>
+                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                        <span className="text-xs font-semibold text-sky-400">Completadas</span>
+                        <p className="text-2xl sm:text-3xl font-extrabold text-sky-400 font-mono">{completedCount}</p>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {/* Filtros y Selector de Vista (Lista / Agenda Semanal) */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800">
-                  <div className="flex items-center gap-2 overflow-x-auto">
-                    <span className="text-xs font-semibold text-slate-400 mr-2 flex items-center gap-1">
-                      <Filter className="h-3.5 w-3.5" /> Filtrar:
-                    </span>
-                    {['TODOS', 'PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'].map((st) => (
-                      <button
-                        key={st}
-                        onClick={() => setStatusFilter(st)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                          statusFilter === st
-                            ? 'bg-teal-600 text-white shadow-md'
-                            : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-                        }`}
-                      >
-                        {st === 'TODOS'
-                          ? 'Todas'
-                          : st === 'PENDING'
-                          ? 'Pendientes'
-                          : st === 'CONFIRMED'
-                          ? 'Confirmadas'
-                          : st === 'COMPLETED'
-                          ? 'Completadas'
-                          : 'Canceladas'}
-                      </button>
-                    ))}
+                {/* Filtros, Buscador y Selector de Vista (Lista / Agenda Semanal) */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+                  <div className="flex flex-wrap items-center gap-2.5 flex-1">
+                    {/* Buscador de Citas */}
+                    <div className="relative min-w-[220px] sm:min-w-[280px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por paciente, médico o turno..."
+                        value={appointmentSearchQuery}
+                        onChange={(e) => setAppointmentSearchQuery(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 transition-all"
+                      />
+                      {appointmentSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setAppointmentSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+                          title="Limpiar búsqueda"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filtros de Estado y Triaje */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                      <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center gap-1">
+                        <Filter className="h-3.5 w-3.5" /> Filtrar:
+                      </span>
+                      {['TODOS', 'PENDING', 'CONFIRMED', 'COMPLETED', 'NO_TRIAGE', 'CANCELLED'].map((st) => (
+                        <button
+                          key={st}
+                          onClick={() => setStatusFilter(st)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                            statusFilter === st
+                              ? st === 'NO_TRIAGE'
+                                ? 'bg-rose-600 text-white shadow-md'
+                                : 'bg-teal-600 text-white shadow-md'
+                              : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                          }`}
+                        >
+                          <span>
+                            {st === 'TODOS'
+                              ? 'Todas'
+                              : st === 'PENDING'
+                              ? 'Pendientes'
+                              : st === 'CONFIRMED'
+                              ? 'Confirmadas'
+                              : st === 'COMPLETED'
+                              ? 'Completadas'
+                              : st === 'NO_TRIAGE'
+                              ? 'Sin Triaje'
+                              : 'Canceladas'}
+                          </span>
+                          {st === 'NO_TRIAGE' && triagePendingCount > 0 && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 text-white font-mono">
+                              {triagePendingCount}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3 self-end sm:self-auto">
+                  <div className="flex items-center gap-3 self-end lg:self-auto">
                     <span className="text-xs text-slate-400 hidden sm:inline">
                       Mostrando {filteredAppointments.length} de {appointments.length} citas
                     </span>
@@ -2735,25 +2821,45 @@ function DashboardContent() {
                                         {app.triage ? (
                                           <button
                                             type="button"
-                                            onClick={() => setSelectedAppForTriage(app)}
-                                            className="w-full text-left py-0.5 px-1.5 rounded text-[10px] bg-teal-500/10 text-teal-300 border border-teal-500/20 flex items-center justify-between hover:bg-teal-500/20 transition-all"
-                                            title="Ver o editar triaje"
+                                            onClick={() => {
+                                              setSelectedAppForTriage(app);
+                                              setTriageBP(app.triage!.bloodPressure);
+                                              setTriageHR(app.triage!.heartRate.toString());
+                                              setTriageTemp(app.triage!.temperature.toString());
+                                              setTriageWeight(app.triage!.weightKg.toString());
+                                              setTriageHeight(app.triage!.heightCm.toString());
+                                              setTriageO2(app.triage!.oxygenSaturation.toString());
+                                              setTriageAllergies(app.triage!.allergies || '');
+                                              setTriageNotes(app.triage!.notes || '');
+                                            }}
+                                            className="w-full text-left py-0.5 px-1.5 rounded text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center justify-between hover:bg-emerald-500/20 transition-all"
+                                            title="Editar signos vitales de triaje"
                                           >
                                             <span className="flex items-center gap-1 font-semibold truncate">
-                                              <Activity className="h-2.5 w-2.5 text-teal-400 flex-shrink-0" />
+                                              <Activity className="h-2.5 w-2.5 text-emerald-400 flex-shrink-0" />
                                               PA {app.triage.bloodPressure}
                                             </span>
-                                            <span className="text-[9px] text-teal-400">Triaje ✓</span>
+                                            <span className="text-[9px] text-emerald-300 font-bold">Editar Triaje</span>
                                           </button>
                                         ) : (
                                           (app.status === 'PENDING' || app.status === 'CONFIRMED') && (
                                             <button
                                               type="button"
-                                              onClick={() => setSelectedAppForTriage(app)}
-                                              className="w-full py-1 px-1.5 rounded text-[10px] font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 flex items-center justify-center gap-1 transition-all"
+                                              onClick={() => {
+                                                setSelectedAppForTriage(app);
+                                                setTriageBP('120/80');
+                                                setTriageHR('75');
+                                                setTriageTemp('36.5');
+                                                setTriageWeight('70');
+                                                setTriageHeight('170');
+                                                setTriageO2('98');
+                                                setTriageAllergies('');
+                                                setTriageNotes('');
+                                              }}
+                                              className="w-full py-1 px-1.5 rounded text-[10px] font-bold bg-teal-600 hover:bg-teal-500 text-white flex items-center justify-center gap-1 shadow-sm transition-all"
                                             >
-                                              <Activity className="h-2.5 w-2.5 text-teal-400" />
-                                              <span>Reg. Triaje</span>
+                                              <Activity className="h-2.5 w-2.5" />
+                                              <span>Tomar Triaje</span>
                                             </button>
                                           )
                                         )}
@@ -2849,9 +2955,10 @@ function DashboardContent() {
                                 )}
                               </div>
 
-                              {user.role === 'ADMIN' && (
+                              {(user.role === 'ADMIN' || user.role === 'NURSE' || user.role === 'RECEPTIONIST') && (
                                 <p className="text-xs text-slate-400">
-                                  Médico: <span className="font-semibold text-slate-300">{app.doctor.fullName}</span> ({app.doctor.specialty}) • Tarifa: ${app.doctor.consultationFee?.toFixed(2)}
+                                  Médico: <span className="font-semibold text-slate-300">{app.doctor.fullName}</span> ({app.doctor.specialty})
+                                  {user.role === 'ADMIN' && ` • Tarifa: $${app.doctor.consultationFee?.toFixed(2)}`}
                                 </p>
                               )}
 
@@ -2887,18 +2994,15 @@ function DashboardContent() {
                                       setTriageNotes('');
                                     }
                                   }}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                                    user.role === 'NURSE'
-                                      ? app.triage
-                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
-                                        : 'bg-teal-600 hover:bg-teal-500 text-white font-bold shadow-md shadow-teal-900/40 ring-1 ring-teal-400/40'
-                                      : app.triage
-                                      ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
-                                      : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700'
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-md ${
+                                    app.triage
+                                      ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40'
+                                      : 'bg-teal-600 hover:bg-teal-500 text-white shadow-teal-900/40 ring-1 ring-teal-400/40'
                                   }`}
+                                  title={app.triage ? 'Editar signos vitales de triaje' : 'Tomar signos vitales de triaje'}
                                 >
-                                  <Activity className="h-3.5 w-3.5 text-teal-400" />
-                                  <span>{app.triage ? 'Triaje Listo ✓' : 'Registrar Triaje'}</span>
+                                  <Activity className="h-3.5 w-3.5 text-teal-300" />
+                                  <span>{app.triage ? 'Editar Triaje' : 'Tomar Triaje'}</span>
                                 </button>
                               )}
 
