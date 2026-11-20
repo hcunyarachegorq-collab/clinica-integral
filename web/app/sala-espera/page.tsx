@@ -26,7 +26,7 @@ export default function WaitingRoomPage() {
   });
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const lastCalledIdRef = useRef<string | null>(null);
 
@@ -85,8 +85,9 @@ export default function WaitingRoomPage() {
     }
   }, [playChime, soundEnabled]);
 
-  // Reloj digital en vivo a 1 segundo
+  // Reloj digital en vivo a 1 segundo (hidratación segura en cliente)
   useEffect(() => {
+    setCurrentTime(new Date());
     const clockTimer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(clockTimer);
   }, []);
@@ -180,11 +181,21 @@ export default function WaitingRoomPage() {
           <div className="bg-slate-900/90 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3 shadow-inner">
             <Clock className="h-4 w-4 text-cyan-400" />
             <div className="text-right">
-              <span className="font-mono text-base font-bold text-white tracking-widest block leading-none">
-                {currentTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              <span
+                suppressHydrationWarning
+                className="font-mono text-base font-bold text-white tracking-widest block leading-none"
+              >
+                {currentTime
+                  ? currentTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  : '--:--:--'}
               </span>
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block mt-0.5">
-                {currentTime.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' })}
+              <span
+                suppressHydrationWarning
+                className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block mt-0.5"
+              >
+                {currentTime
+                  ? currentTime.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' })
+                  : '--:--:--'}
               </span>
             </div>
           </div>
